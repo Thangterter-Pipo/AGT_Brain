@@ -64,6 +64,9 @@ Grok ────────┘        │
 
 ## Cài Đặt
 
+> [!TIP]
+> **🤖 Dành cho AI Agent**: Nếu bạn là một AI Agent mới tham gia phát triển dự án, hãy đọc và làm theo hướng dẫn thiết lập tự động hoàn chỉnh tại [Setup_Agent_Prompt.md](file:///E:/AGT_Brain/Agent_Profiles/Setup_Agent_Prompt.md) để tự cấu hình Rust workspace, Node scripts, Python venv và khởi tạo database index hoàn toàn tự động.
+
 ### Yêu cầu
 - [Rust](https://rustup.rs/) (1.85+ / Edition 2024)
 - Tài khoản [Supabase](https://supabase.com/) miễn phí
@@ -174,16 +177,28 @@ Binaries output:
    mode = "single_proxy"
    proxy_url = "http://username:password@your_proxy_ip:port/"
    ```
-4. **Lấy Cookie `sso` từ grok.com**:
-   - Truy cập **https://grok.com** và đăng nhập.
-   - Nhấn **F12** -> chọn tab **Console** -> gõ `document.cookie` -> nhấn **Enter**.
-   - Copy toàn bộ chuỗi text kết quả bên trong dấu nháy kép (chứa biến `sso=eyJ...`).
-5. **Nạp token vào hệ thống**:
-   - Truy cập trang quản trị Admin local: `http://127.0.0.1:8000/admin` (mật khẩu mặc định: `grok2api`).
-   - Vào mục **Account / Tokens**, dán chuỗi cookie vừa copy vào và nhấn **Thêm tài khoản**.
-   - Hệ thống sẽ tự động đồng bộ hạn mức (quota) qua proxy và chuyển tài khoản sang trạng thái `active`.
-6. **Khởi chạy nhanh**:
-   Bấm đúp chạy tệp [run_grok_local.bat](file:///E:/AGT_Brain/scripts/run_grok_local.bat) để kích hoạt server chạy ẩn cổng 8000.
+ 4. **Tự động lấy & làm mới Cookie grok.com qua CDP (Khuyên dùng)**:
+   Để tránh việc phải copy thủ công phức tạp và hay bị hết hạn, hệ thống hỗ trợ tự động hoá hoàn toàn qua Edge thật bằng CDP (Chrome DevTools Protocol):
+   - **Bước 1 (Đăng nhập lần đầu)**: 
+     ```bash
+     cd scripts/grok_cookie_refresh
+     node cookie_refresh_v2.js --login
+     ```
+     Trình duyệt Edge thực sẽ mở ra (dùng profile riêng, không ảnh hưởng Edge chính). Hãy tiến hành đăng nhập vào grok.com bình thường.
+   - **Bước 2 (Trích xuất & Tự động Push)**: 
+     Sau khi đăng nhập thành công, giữ nguyên trình duyệt Edge đang mở và chạy lệnh:
+     ```bash
+     node quick_extract.js
+     ```
+     Script sẽ kết nối vào Edge, lấy cookie SSO mới nhất, backup cục bộ, và tự động gọi API đẩy trực tiếp vào database của `grok2api` local.
+   - **Các lần sau (Tự động Refresh)**:
+     Chỉ cần chạy lệnh:
+     ```bash
+     node cookie_refresh_v2.js --auto
+     ```
+     Hệ thống sẽ chạy ngầm trình duyệt (headless), tự động refresh cookie SSO mới và push trực tiếp cho bạn mà không cần đăng nhập lại.
+ 5. **Khởi chạy nhanh**:
+   Bấm đúp chạy tệp [run_grok_local.bat](file:///E:/AGT_Brain/scripts/run_grok_local.bat) để kích hoạt server chạy ẩn cổng 8000. Mật khẩu Admin dashboard mặc định là `grok2api` (nếu dashboard yêu cầu mật khẩu).
 
 ---
 
@@ -213,16 +228,28 @@ To optimize API latency and prevent Cloudflare blocking (403 errors) when callin
    mode = "single_proxy"
    proxy_url = "http://username:password@your_proxy_ip:port/"
    ```
-4. **Extract the `sso` Cookie**:
-   - Access **https://grok.com** on your browser and sign in.
-   - Press **F12** -> go to **Console** tab -> execute `document.cookie` -> press **Enter**.
-   - Copy the output string inside the quotation marks (which contains `sso=eyJ...`).
-5. **Add the Token to Local DB**:
-   - Access the local Admin panel at `http://127.0.0.1:8000/admin` (default password is `grok2api`).
-   - Go to the **Account / Tokens** section, paste the full cookie string, and click **Add Account**.
-   - The gateway will automatically query and synchronize account quotas via your proxy to change the status to `active`.
-6. **Quick Boot**:
-   Double-click the [run_grok_local.bat](file:///E:/AGT_Brain/scripts/run_grok_local.bat) script to run the local server in the background.
+ 4. **Automated Cookie Extract & Refresh via CDP (Recommended)**:
+   Avoid extracting SSO tokens manually. The repo comes with a Chrome DevTools Protocol (CDP) script leveraging Edge:
+   - **Step 1 (First-Time Login)**:
+     ```bash
+     cd scripts/grok_cookie_refresh
+     node cookie_refresh_v2.js --login
+     ```
+     This opens a real Edge browser with a dedicated profile. Log in to grok.com as usual.
+   - **Step 2 (Extract & Push)**:
+     While keeping the Edge browser open, run:
+     ```bash
+     node quick_extract.js
+     ```
+     This connects to the Edge instance via CDP, grabs the latest SSO cookie, backs it up, and pushes it directly into your local `grok2api` instance.
+   - **Subsequent Runs (Auto-Refresh)**:
+     Simply run:
+     ```bash
+     node cookie_refresh_v2.js --auto
+     ```
+     The script will open a headless Edge browser, automatically refresh the token, and push it directly without requiring manual login.
+ 5. **Quick Boot**:
+   Double-click the [run_grok_local.bat](file:///E:/AGT_Brain/scripts/run_grok_local.bat) script to run the local server in the background. The default admin panel password is `grok2api`.
 
 ---
 
