@@ -32,34 +32,57 @@ AGT_Brain/
 └── Cargo.toml          # Rust workspace (resolver 2, edition 2024)
 ```
 
-### 2-AI Team Architecture
+### Sơ Đồ Kiến Trúc Hệ Thống Chi Tiết (System Architecture)
 
-```
-┌──────────────────────────────────────────────────┐
-│                   Bố (User)                      │
-│                      │                            │
-│             ┌────────┴────────┐                  │
-│             │   Antigravity   │ ← THE BUILDER    │
-│             │  (Main Brain)   │   Orchestrator   │
-│             └───────┬────────┘                   │
-│                     │                             │
-│             ┌───────┴───────┐                    │
-│             │     Grok      │ ← RESEARCHER       │
-│             │  "Gravity"    │   Think / Review   │
-│             └───────────────┘                    │
-└──────────────────────────────────────────────────┘
-```
+```mermaid
+graph TD
+    %% Nodes definition
+    User["👨‍💻 Bố (User)"]
+    IDE["💻 Antigravity IDE (VS Code Fork)"]
+    
+    subgraph RustWorkspace["📦 Rust Workspace (E:\\AGT_Brain)"]
+        Builder["🤖 Antigravity (THE BUILDER)<br>Main Agent / Orchestrator"]
+        agt_mcp["🔌 agt-mcp<br>MCP Server (rmcp / stdio)"]
+        agt_tools["🔧 agt-tools<br>14 core tools / CDP Controller"]
+        agt_memory["🧠 agt-memory<br>Supabase client / Sync queue"]
+    end
 
-### Shared Memory Flow
+    subgraph MemorySystem["💾 Memory System"]
+        Supabase["☁️ Supabase Cloud (Primary)<br>memories & pgvector"]
+        LocalLogs["📁 Local Log files (Append-Only)<br>decisions/ & incidents/"]
+        LocalQueue["📄 memory_queue.jsonl<br>Local Offline Fallback"]
+    end
 
-```
-Antigravity ─┐
-             ├──→ Supabase Cloud (memories table)
-Grok ────────┘        │
-                       ├── keyword search (ilike)
-                       ├── semantic search (pgvector)
-                       ├── team recall (importance ≥ 3)
-                       └── archive (→ memories_archive)
+    subgraph SubagentSystem["🧠 Subagent Interface (Gravity)"]
+        Grok["🦉 Grok 'Gravity' (RESEARCHER)<br>Think / Review / Research"]
+        GrokAPI["🌐 grok2api (Local Server)<br>Port 8000"]
+        EdgeCDP["🌐 Real Edge Browser (CDP)<br>Auto-refresh Session Cookie"]
+        Proxy["🛡️ Clean Outbound Proxy<br>Bypass Cloudflare 403"]
+    end
+
+    %% Connections
+    User -->|Ra lệnh / Chat| IDE
+    IDE <-->|Giao tiếp via stdio| agt_mcp
+    agt_mcp <-->|Expose tools| Builder
+    Builder -->|Thực thi logic| agt_tools
+    Builder -->|Đọc/Ghi memory| agt_memory
+    
+    agt_memory <-->|REST API / pgvector| Supabase
+    agt_memory -->|Fallback offline| LocalQueue
+    Builder -->|Lưu vết hệ thống| LocalLogs
+    
+    agt_tools -->|ask_grok.ps1 / HTTP| GrokAPI
+    GrokAPI <-->|Route requests| Grok
+    EdgeCDP -->|Trích xuất SSO cookie| GrokAPI
+    GrokAPI -->|Bypass CF 403| Proxy
+    Proxy -->|Đọc/Ghi session| Grok
+
+    %% Custom styling
+    style User fill:#d4ebf2,stroke:#1a73e8,stroke-width:2px,color:#000
+    style IDE fill:#f9f9f9,stroke:#333,stroke-width:2px,color:#000
+    style Builder fill:#e6f4ea,stroke:#137333,stroke-width:2px,color:#000
+    style Grok fill:#fef7e0,stroke:#b06000,stroke-width:2px,color:#000
+    style Supabase fill:#fce8e6,stroke:#c5221f,stroke-width:2px,color:#000
 ```
 
 ## Cài Đặt
