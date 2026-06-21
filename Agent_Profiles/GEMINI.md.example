@@ -167,13 +167,15 @@ powershell -ExecutionPolicy Bypass -File "<YOUR_REPOSITORY_ROOT_PATH>\scripts\as
 
 ---
 
-## 9Router Skill Setup
+## External API / 9Router Skill Setup (Optional / Tùy chọn)
 
-Nếu sử dụng cổng API của 9Router:
-
+Nếu bạn sử dụng gateway **9Router** (để tích hợp các dịch vụ nâng cao như Search, TTS, STT, Embeddings):
 ```bash
 export NINEROUTER_URL="http://localhost:20128" # hoặc URL tunnel của bạn
 export NINEROUTER_KEY="YOUR_NINEROUTER_KEY"     # Lấy từ dashboard của 9Router
 ```
-
 Tất cả request sẽ được gửi qua `${NINEROUTER_URL}/v1/...` kèm header `Authorization: Bearer ${NINEROUTER_KEY}`.
+
+**Nếu KHÔNG sử dụng 9Router**:
+Hãy bỏ qua phần cấu hình 9Router ở trên và thiết lập trực tiếp các biến môi trường API Key tiêu chuẩn của nhà cung cấp bạn chọn (ví dụ: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) trong cài đặt môi trường của IDE hoặc hệ điều hành để Agent gọi API trực tiếp.
+
