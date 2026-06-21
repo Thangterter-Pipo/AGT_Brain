@@ -374,6 +374,9 @@ Tính năng:
 - 📋 **Trình duyệt ký ức nâng cao**: Giao diện tối dạng kính mờ (Glassmorphism), hiển thị và tìm kiếm nhanh các ký ức dài hạn trên Supabase Cloud với đầy đủ bộ lọc (agent, category, importance).
 - 📊 **Biểu đồ thống kê & API Health**: Thống kê số lượng ký ức theo Agent và đo lường thời gian trễ (latency) kết nối của các dịch vụ API.
 
+> [!NOTE]
+> Để tương tác với Grok Chat và Token Manager trên Dashboard, đảm bảo rằng local API Gateway (`grok2api`) đang chạy ở cổng 8000 và đã được cấu hình khóa truy cập (mặc định là `grok2api`). Giao thức trao đổi sẽ tự động nhúng mã xác thực này dưới dạng Bearer token.
+
 ### Rust API Example
 
 ```rust

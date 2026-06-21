@@ -1649,7 +1649,8 @@
                 const resp = await fetch(`${GROK_URL}/v1/chat/completions`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer grok2api'
                     },
                     body: JSON.stringify({
                         model: 'grok-4',
