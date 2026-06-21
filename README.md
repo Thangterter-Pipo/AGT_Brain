@@ -90,6 +90,12 @@ graph TD
 > [!TIP]
 > **🤖 Dành cho AI Agent**: Nếu bạn là một AI Agent mới tham gia phát triển dự án, hãy đọc và làm theo hướng dẫn thiết lập tự động hoàn chỉnh tại [Setup_Agent_Prompt.md](file:///E:/AGT_Brain/Agent_Profiles/Setup_Agent_Prompt.md) để tự cấu hình Rust workspace, Node scripts, Python venv và khởi tạo database index hoàn toàn tự động.
 
+> [!IMPORTANT]
+> **💻 Dành cho Lập trình viên (Người dùng)**:
+> Để Agent Antigravity hoạt động đúng chuẩn và tuân thủ các quy tắc trong IDE của bạn, hãy tạo hoặc cập nhật file cấu hình system rules của Agent trên máy của bạn (thường lưu tại `C:\Users\<Tên_User>\.gemini\GEMINI.md` hoặc `.gemini/GEMINI.md` tại root project tùy môi trường IDE):
+> 1. Sao chép nội dung từ file mẫu cấu hình sạch: [GEMINI.md.example](file:///E:/AGT_Brain/Agent_Profiles/GEMINI.md.example).
+> 2. Chỉnh sửa các placeholder `<YOUR_REPOSITORY_ROOT_PATH>` và `YOUR_NINEROUTER_KEY` tương ứng với thư mục clone dự án và thông tin cá nhân của bạn.
+
 ### Yêu cầu
 - [Rust](https://rustup.rs/) (1.85+ / Edition 2024)
 - Tài khoản [Supabase](https://supabase.com/) miễn phí
