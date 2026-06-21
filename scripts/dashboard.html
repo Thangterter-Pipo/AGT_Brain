@@ -4,39 +4,50 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🧠 Antigravity Brain — Admin Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-card: #1a1a2e;
-            --bg-hover: #222240;
+            --bg-primary: #080810;
+            --bg-secondary: #0f0f1b;
+            --bg-card: rgba(22, 22, 38, 0.7);
+            --bg-hover: rgba(36, 36, 64, 0.8);
             --accent: #6c5ce7;
-            --accent-glow: rgba(108, 92, 231, 0.3);
-            --grok-color: #e74c3c;
+            --accent-rgb: 108, 92, 231;
+            --accent-glow: rgba(108, 92, 231, 0.25);
+            --grok-color: #ff7675;
             --chatgpt-color: #2ecc71;
-            --antigravity-color: #3498db;
-            --text-primary: #e8e8f0;
-            --text-secondary: #8888a0;
-            --text-muted: #555570;
-            --border: #2a2a40;
+            --antigravity-color: #00cec9;
+            --text-primary: #f1f2f6;
+            --text-secondary: #a4b0be;
+            --text-muted: #57606f;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(108, 92, 231, 0.4);
             --success: #2ecc71;
             --warning: #f1c40f;
             --danger: #e74c3c;
+            --glass-blur: 16px;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Inter', -apple-system, sans-serif;
-            background: var(--bg-primary);
+            background: radial-gradient(circle at top right, #1e1548 0%, var(--bg-primary) 60%);
             color: var(--text-primary);
             min-height: 100vh;
+            overflow-x: hidden;
         }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
         /* Header */
         .header {
-            background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
+            background: rgba(15, 15, 27, 0.6);
+            backdrop-filter: blur(var(--glass-blur));
             border-bottom: 1px solid var(--border);
             padding: 1rem 2rem;
             display: flex;
@@ -45,93 +56,141 @@
             position: sticky;
             top: 0;
             z-index: 100;
-            backdrop-filter: blur(20px);
         }
 
         .header h1 {
             font-size: 1.4rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent), #a29bfe);
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #00cec9, var(--accent), #a29bfe);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .header-actions {
             display: flex;
             gap: 0.75rem;
+            align-items: center;
+        }
+
+        .config-status {
+            font-size: 0.75rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--text-secondary);
+        }
+
+        .config-status.loaded {
+            border-color: rgba(46, 204, 113, 0.3);
+            background: rgba(46, 204, 113, 0.05);
+            color: var(--success);
         }
 
         .btn {
-            padding: 0.5rem 1rem;
+            padding: 0.55rem 1.1rem;
             border: 1px solid var(--border);
             background: var(--bg-card);
             color: var(--text-primary);
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 0.85rem;
+            font-weight: 500;
             font-family: inherit;
-            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .btn:hover {
             background: var(--bg-hover);
-            border-color: var(--accent);
-            box-shadow: 0 0 15px var(--accent-glow);
+            border-color: var(--border-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
 
         .btn-primary {
             background: var(--accent);
             border-color: var(--accent);
+            color: #fff;
         }
 
         .btn-primary:hover {
-            background: #7d6ef0;
-        }
-
-        .btn-danger {
-            border-color: var(--danger);
-            color: var(--danger);
+            background: #5b4bc4;
+            border-color: #5b4bc4;
+            box-shadow: 0 4px 20px rgba(108, 92, 231, 0.4);
         }
 
         /* Main Layout */
         .main {
             display: grid;
-            grid-template-columns: 280px 1fr;
-            min-height: calc(100vh - 60px);
+            grid-template-columns: 320px 1fr;
+            min-height: calc(100vh - 65px);
         }
 
         /* Sidebar */
         .sidebar {
-            background: var(--bg-secondary);
+            background: rgba(15, 15, 27, 0.4);
+            backdrop-filter: blur(var(--glass-blur));
             border-right: 1px solid var(--border);
-            padding: 1.5rem 1rem;
+            padding: 1.5rem 1.25rem;
+            overflow-y: auto;
         }
 
         .stat-card {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1rem;
+            border-radius: 14px;
+            padding: 1.1rem;
             margin-bottom: 0.75rem;
-            transition: all 0.2s;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background: transparent;
+            transition: background-color 0.3s;
         }
 
         .stat-card:hover {
-            border-color: var(--accent);
-            box-shadow: 0 0 20px var(--accent-glow);
+            border-color: var(--border-hover);
+            transform: translateX(2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
+
+        .stat-card.antigravity::before { background: var(--antigravity-color); }
+        .stat-card.grok::before { background: var(--grok-color); }
+        .stat-card.chatgpt::before { background: var(--chatgpt-color); }
 
         .stat-label {
             font-size: 0.75rem;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 0.25rem;
+            letter-spacing: 0.75px;
+            margin-bottom: 0.3rem;
+            font-weight: 600;
         }
 
         .stat-value {
-            font-size: 1.8rem;
-            font-weight: 700;
+            font-size: 2rem;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
         }
 
         .stat-value.grok { color: var(--grok-color); }
@@ -142,11 +201,14 @@
             font-size: 0.8rem;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin: 1.5rem 0 0.75rem;
+            letter-spacing: 1.2px;
+            margin: 1.75rem 0 0.8rem;
+            font-weight: 700;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            padding-bottom: 0.25rem;
         }
 
-        /* Filters */
+        /* Filters & Forms */
         .filter-group {
             margin-bottom: 1rem;
         }
@@ -155,126 +217,227 @@
             font-size: 0.8rem;
             color: var(--text-secondary);
             display: block;
-            margin-bottom: 0.3rem;
+            margin-bottom: 0.4rem;
+            font-weight: 500;
         }
 
         .filter-group select, .filter-group input {
             width: 100%;
-            padding: 0.5rem;
+            padding: 0.6rem;
             background: var(--bg-card);
             border: 1px solid var(--border);
             color: var(--text-primary);
-            border-radius: 8px;
+            border-radius: 10px;
             font-family: inherit;
             font-size: 0.85rem;
+            transition: all 0.2s;
         }
 
         .filter-group select:focus, .filter-group input:focus {
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 10px var(--accent-glow);
+            background: var(--bg-hover);
+        }
+
+        /* Health & Token Info */
+        .health-row {
+            display: flex;
+            gap: 0.65rem;
+            align-items: center;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+        }
+
+        .health-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            position: relative;
+        }
+
+        .health-dot.healthy { background: var(--success); box-shadow: 0 0 10px var(--success); }
+        .health-dot.unhealthy { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+        .health-dot.warning { background: var(--warning); box-shadow: 0 0 10px var(--warning); }
+
+        .health-label {
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .health-val {
+            margin-left: auto;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
         }
 
         /* Content Area */
         .content {
-            padding: 1.5rem;
+            padding: 2rem;
             overflow-y: auto;
+            background: linear-gradient(180deg, rgba(8,8,16,0.5) 0%, var(--bg-primary) 100%);
         }
 
         .toolbar {
             display: flex;
             gap: 0.75rem;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
             align-items: center;
+            background: var(--bg-card);
+            padding: 0.75rem;
+            border-radius: 14px;
+            border: 1px solid var(--border);
         }
 
         .search-box {
             flex: 1;
-            padding: 0.6rem 1rem;
-            background: var(--bg-card);
+            padding: 0.65rem 1.25rem;
+            background: rgba(0, 0, 0, 0.2);
             border: 1px solid var(--border);
             color: var(--text-primary);
             border-radius: 10px;
             font-family: inherit;
             font-size: 0.9rem;
+            transition: all 0.2s;
         }
 
         .search-box:focus {
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 15px var(--accent-glow);
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        /* Token Panel Card */
+        .token-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .token-panel h2 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .token-status-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            background: rgba(255,255,255,0.02);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .token-input-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .token-input {
+            flex: 1;
+            padding: 0.6rem 1rem;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .token-input:focus {
+            outline: none;
+            border-color: var(--accent);
         }
 
         /* Memory Cards */
         .memory-list {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.75rem;
         }
 
         .memory-card {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 1rem;
-            transition: all 0.2s;
-            cursor: pointer;
+            border-radius: 12px;
+            padding: 1.25rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
         }
 
         .memory-card:hover {
-            border-color: var(--accent);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            background: var(--bg-hover);
         }
 
         .memory-meta {
             display: flex;
-            gap: 0.5rem;
+            gap: 0.55rem;
             align-items: center;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
             flex-wrap: wrap;
         }
 
         .badge {
             font-size: 0.7rem;
-            padding: 0.15rem 0.5rem;
+            padding: 0.25rem 0.6rem;
             border-radius: 20px;
-            font-weight: 600;
+            font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .badge-agent {
-            background: rgba(108, 92, 231, 0.2);
-            color: var(--accent);
-            border: 1px solid rgba(108, 92, 231, 0.3);
+            background: rgba(0, 206, 201, 0.15);
+            color: var(--antigravity-color);
+            border: 1px solid rgba(0, 206, 201, 0.25);
         }
 
         .badge-agent.grok {
-            background: rgba(231, 76, 60, 0.2);
+            background: rgba(255, 118, 117, 0.15);
             color: var(--grok-color);
-            border-color: rgba(231, 76, 60, 0.3);
+            border-color: rgba(255, 118, 117, 0.25);
         }
 
         .badge-agent.chatgpt {
-            background: rgba(46, 204, 113, 0.2);
+            background: rgba(46, 204, 113, 0.15);
             color: var(--chatgpt-color);
-            border-color: rgba(46, 204, 113, 0.3);
+            border-color: rgba(46, 204, 113, 0.25);
         }
 
         .badge-category {
-            background: rgba(52, 152, 219, 0.2);
-            color: var(--antigravity-color);
-            border: 1px solid rgba(52, 152, 219, 0.3);
+            background: rgba(108, 92, 231, 0.12);
+            color: #a29bfe;
+            border: 1px solid rgba(108, 92, 231, 0.2);
         }
 
         .badge-importance {
-            font-size: 0.7rem;
-            color: var(--text-muted);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.15rem;
         }
 
         .memory-content {
-            font-size: 0.9rem;
-            line-height: 1.5;
+            font-size: 0.95rem;
+            line-height: 1.6;
             color: var(--text-primary);
             white-space: pre-wrap;
             word-break: break-word;
@@ -283,47 +446,30 @@
         .memory-time {
             font-size: 0.75rem;
             color: var(--text-muted);
-            margin-top: 0.5rem;
-        }
-
-        /* Health Indicators */
-        .health-row {
+            margin-top: 0.75rem;
             display: flex;
-            gap: 0.5rem;
+            justify-content: space-between;
             align-items: center;
-            padding: 0.5rem 0;
-        }
-
-        .health-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--text-muted);
-        }
-
-        .health-dot.healthy { background: var(--success); box-shadow: 0 0 6px var(--success); }
-        .health-dot.unhealthy { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
-
-        .health-label {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+            border-top: 1px solid rgba(255, 255, 255, 0.02);
+            padding-top: 0.5rem;
         }
 
         /* Loading */
         .loading {
             text-align: center;
-            padding: 3rem;
-            color: var(--text-muted);
+            padding: 4rem;
+            color: var(--text-secondary);
         }
 
         .spinner {
             display: inline-block;
-            width: 30px;
-            height: 30px;
-            border: 3px solid var(--border);
+            width: 35px;
+            height: 35px;
+            border: 3px solid rgba(255,255,255,0.05);
             border-top-color: var(--accent);
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+            animation: spin 0.8s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
+            margin-bottom: 1rem;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -333,26 +479,27 @@
             position: fixed;
             bottom: 2rem;
             right: 2rem;
-            background: var(--bg-card);
+            background: #12121a;
             border: 1px solid var(--accent);
-            border-radius: 10px;
-            padding: 0.75rem 1.25rem;
-            box-shadow: 0 4px 25px rgba(108,92,231,0.3);
+            border-radius: 12px;
+            padding: 0.8rem 1.5rem;
+            box-shadow: 0 8px 30px rgba(108, 92, 231, 0.3);
             font-size: 0.9rem;
+            font-weight: 500;
             z-index: 200;
-            animation: slideUp 0.3s ease;
+            animation: slideUp 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
             display: none;
         }
 
         @keyframes slideUp {
-            from { transform: translateY(20px); opacity: 0; }
+            from { transform: translateY(30px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
 
         /* Responsive */
-        @media (max-width: 768px) {
+        @media (max-width: 992px) {
             .main { grid-template-columns: 1fr; }
-            .sidebar { display: none; }
+            .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
         }
     </style>
 </head>
@@ -360,9 +507,10 @@
     <div class="header">
         <h1>🧠 Antigravity Brain — Admin Dashboard</h1>
         <div class="header-actions">
+            <span class="config-status" id="config-status-label">⚙️ Config: Checking...</span>
             <button class="btn" onclick="checkHealth()">🏥 Health Check</button>
             <button class="btn" onclick="loadStats()">📊 Refresh Stats</button>
-            <button class="btn btn-primary" onclick="loadMemories()">🔄 Reload</button>
+            <button class="btn btn-primary" onclick="reloadData()">🔄 Reload</button>
         </div>
     </div>
 
@@ -372,15 +520,15 @@
                 <div class="stat-label">Total Memories</div>
                 <div class="stat-value" id="stat-total">—</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card antigravity">
                 <div class="stat-label">🔵 Antigravity</div>
                 <div class="stat-value antigravity" id="stat-antigravity">—</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card grok">
                 <div class="stat-label">🔴 Grok</div>
                 <div class="stat-value grok" id="stat-grok">—</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card chatgpt">
                 <div class="stat-label">🟢 ChatGPT</div>
                 <div class="stat-value chatgpt" id="stat-chatgpt">—</div>
             </div>
@@ -426,29 +574,55 @@
                 </select>
             </div>
 
-            <h3>API Health</h3>
+            <h3>API Connections</h3>
             <div id="health-section">
                 <div class="health-row">
                     <div class="health-dot" id="health-supabase"></div>
                     <span class="health-label">Supabase</span>
+                    <span class="health-val" id="val-supabase">—</span>
                 </div>
                 <div class="health-row">
                     <div class="health-dot" id="health-grok"></div>
-                    <span class="health-label">Grok API</span>
+                    <span class="health-label">Grok API Gateway</span>
+                    <span class="health-val" id="val-grok">—</span>
                 </div>
                 <div class="health-row">
                     <div class="health-dot" id="health-chatgpt"></div>
                     <span class="health-label">ChatGPT API</span>
+                    <span class="health-val" id="val-chatgpt">—</span>
                 </div>
             </div>
         </div>
 
         <div class="content">
-            <div class="toolbar">
-                <input class="search-box" id="search-input" placeholder="🔍 Search memories..." onkeydown="if(event.key==='Enter') loadMemories()">
-                <button class="btn" onclick="loadMemories()">Search</button>
-                <span id="result-count" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+            <!-- Grok Token Management Panel -->
+            <div class="token-panel">
+                <h2>🦉 Grok.com Cookie Token Manager (grok2api)</h2>
+                <div class="token-status-info">
+                    <span>Trạng thái Grok Gateway:</span>
+                    <div class="health-dot" id="grok-token-dot"></div>
+                    <strong id="grok-token-status">Checking...</strong>
+                    <span style="margin-left: auto;" id="grok-token-count">0 tokens active</span>
+                </div>
+                <div class="token-input-group">
+                    <input class="token-input" id="sso-cookie-input" placeholder="Dán cookie SSO (sso=eyJ...) để đẩy trực tiếp vào grok2api...">
+                    <button class="btn btn-primary" onclick="addGrokToken()">➕ Push Token</button>
+                    <button class="btn" onclick="checkGrokTokens()">🔄 Sync Status</button>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; display: flex; justify-content: space-between;">
+                    <span>* Mẹo: chạy `node scripts/grok_cookie_refresh/quick_extract.js` để tự động đẩy cookie từ Edge.</span>
+                    <span style="font-family: 'JetBrains Mono'; color: var(--accent);" id="grok-token-preview"></span>
+                </div>
             </div>
+
+            <!-- Toolbar Search -->
+            <div class="toolbar">
+                <input class="search-box" id="search-input" placeholder="🔍 Tìm kiếm ký ức (Nhấn Enter)..." onkeydown="if(event.key==='Enter') loadMemories()">
+                <button class="btn btn-primary" onclick="loadMemories()">Search</button>
+                <span id="result-count" style="font-size: 0.85rem; color: var(--text-secondary); margin-left: auto;"></span>
+            </div>
+
+            <!-- Memory List -->
             <div class="memory-list" id="memory-list">
                 <div class="loading"><div class="spinner"></div><p>Loading memories...</p></div>
             </div>
@@ -458,22 +632,71 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // === CONFIG ===
-        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-        const SUPABASE_KEY = 'YOUR_SUPABASE_KEY';
+        // === STATE ===
+        let SUPABASE_URL = '';
+        let SUPABASE_KEY = '';
         const GROK_URL = 'http://127.0.0.1:8000';
         const CHATGPT_URL = 'http://localhost:5005';
+        let headers = {};
+        let configLoaded = false;
 
-        const headers = {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json',
-        };
+        // === CONFIG AUTO-LOADER ===
+        async function initConfig() {
+            const statusLabel = document.getElementById('config-status-label');
+            try {
+                // Fetch dynamic config from local workspace
+                const resp = await fetch('/data/supabase_config.json');
+                if (!resp.ok) throw new Error('Cannot load local file');
+                const config = await resp.json();
+                
+                if (config.supabase_url && config.supabase_key) {
+                    SUPABASE_URL = config.supabase_url;
+                    SUPABASE_KEY = config.supabase_key;
+                    headers = {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'Content-Type': 'application/json',
+                    };
+                    configLoaded = true;
+                    statusLabel.textContent = '⚙️ Config: Local Database Connected';
+                    statusLabel.className = 'config-status loaded';
+                    showToast('✅ Đã nạp file supabase_config.json!');
+                } else {
+                    throw new Error('Config missing keys');
+                }
+            } catch (err) {
+                console.warn('Fallback dynamic loading failed:', err.message);
+                statusLabel.textContent = '⚠️ Config: No Supabase Credentials';
+                statusLabel.className = 'config-status';
+                document.getElementById('memory-list').innerHTML = `
+                    <div class="loading">
+                        <p>❌ Chưa cấu hình thông tin kết nối Supabase Cloud.</p>
+                        <p style="font-size:0.8rem; margin-top:0.5rem; color:var(--text-muted);">
+                            Vui lòng cập nhật thông tin trong file <code>data/supabase_config.json</code> tại workspace local.
+                        </p>
+                    </div>
+                `;
+            }
+        }
+
+        // === RE-LOAD SYSTEM DATA ===
+        async function reloadData() {
+            if (!configLoaded) {
+                await initConfig();
+            }
+            if (configLoaded) {
+                loadMemories();
+                loadStats();
+            }
+            checkHealth();
+            checkGrokTokens();
+        }
 
         // === MEMORY LOADING ===
         async function loadMemories() {
+            if (!configLoaded) return;
             const list = document.getElementById('memory-list');
-            list.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading...</p></div>';
+            list.innerHTML = '<div class="loading"><div class="spinner"></div><p>Đang tải memories...</p></div>';
 
             const agent = document.getElementById('filter-agent').value;
             const category = document.getElementById('filter-category').value;
@@ -491,33 +714,37 @@
                 const resp = await fetch(url, { headers });
                 const memories = await resp.json();
 
-                document.getElementById('result-count').textContent = `${memories.length} memories`;
+                document.getElementById('result-count').textContent = `${memories.length} memories found`;
 
                 if (memories.length === 0) {
-                    list.innerHTML = '<div class="loading"><p>No memories found.</p></div>';
+                    list.innerHTML = '<div class="loading"><p>Không tìm thấy ký ức nào phù hợp.</p></div>';
                     return;
                 }
 
                 list.innerHTML = memories.map(m => `
-                    <div class="memory-card" onclick="this.querySelector('.memory-content').classList.toggle('expanded')">
+                    <div class="memory-card">
                         <div class="memory-meta">
                             <span class="badge badge-agent ${m.agent}">${agentEmoji(m.agent)} ${m.agent}</span>
                             <span class="badge badge-category">${m.category}</span>
                             <span class="badge-importance">${'⭐'.repeat(m.importance || 3)} (${m.importance || 3})</span>
-                            <span class="badge-importance">conf:${m.confidence || 3}</span>
+                            <span class="badge-importance" style="color:var(--text-muted)">Confidence: ${m.confidence || 3}</span>
                         </div>
                         <div class="memory-content">${escapeHtml(m.content || '')}</div>
-                        <div class="memory-time">${formatTime(m.created_at)} · ID: ${m.id}</div>
+                        <div class="memory-time">
+                            <span>ID: ${m.id} · Category: ${m.category}</span>
+                            <span>${formatTime(m.created_at)}</span>
+                        </div>
                     </div>
                 `).join('');
 
             } catch (err) {
-                list.innerHTML = `<div class="loading"><p>❌ Error: ${err.message}</p></div>`;
+                list.innerHTML = `<div class="loading"><p>❌ Lỗi truy vấn database: ${err.message}</p></div>`;
             }
         }
 
         // === STATS ===
         async function loadStats() {
+            if (!configLoaded) return;
             try {
                 // Total
                 const resp = await fetch(`${SUPABASE_URL}/rest/v1/memories?select=id&limit=1`, {
@@ -544,38 +771,129 @@
                 const arng = ar.headers.get('content-range');
                 document.getElementById('stat-archived').textContent = arng ? arng.split('/')[1] : '0';
 
-                showToast('📊 Stats refreshed!');
+                showToast('📊 Đã làm mới số liệu thống kê!');
             } catch (err) {
-                showToast('❌ Stats error: ' + err.message);
+                showToast('❌ Thống kê lỗi: ' + err.message);
             }
         }
 
         // === HEALTH CHECK ===
         async function checkHealth() {
             // Supabase
-            try {
-                const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?select=id&limit=1`, { headers });
-                setHealth('supabase', r.ok);
-            } catch { setHealth('supabase', false); }
+            if (configLoaded) {
+                try {
+                    const t0 = performance.now();
+                    const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?select=id&limit=1`, { headers });
+                    const t1 = performance.now();
+                    setHealth('supabase', r.ok, `${Math.round(t1 - t0)}ms`);
+                } catch { setHealth('supabase', false); }
+            } else {
+                setHealth('supabase', 'warning', 'No Config');
+            }
 
             // Grok
             try {
+                const t0 = performance.now();
                 const r = await fetch(`${GROK_URL}/v1/models`);
-                setHealth('grok', r.ok);
+                const t1 = performance.now();
+                setHealth('grok', r.ok, `${Math.round(t1 - t0)}ms`);
             } catch { setHealth('grok', false); }
 
             // ChatGPT
             try {
+                const t0 = performance.now();
                 const r = await fetch(`${CHATGPT_URL}/v1/models`);
-                setHealth('chatgpt', r.ok);
+                const t1 = performance.now();
+                setHealth('chatgpt', r.ok, `${Math.round(t1 - t0)}ms`);
             } catch { setHealth('chatgpt', false); }
-
-            showToast('🏥 Health check complete');
         }
 
-        function setHealth(service, healthy) {
+        function setHealth(service, healthy, info = '') {
             const dot = document.getElementById(`health-${service}`);
-            dot.className = `health-dot ${healthy ? 'healthy' : 'unhealthy'}`;
+            const val = document.getElementById(`val-${service}`);
+            
+            if (healthy === 'warning') {
+                dot.className = 'health-dot warning';
+            } else {
+                dot.className = `health-dot ${healthy ? 'healthy' : 'unhealthy'}`;
+            }
+            val.textContent = healthy ? info || 'Online' : 'Offline';
+        }
+
+        // === GROK TOKEN MANAGEMENT ===
+        async function checkGrokTokens() {
+            const statusDot = document.getElementById('grok-token-dot');
+            const statusText = document.getElementById('grok-token-status');
+            const countText = document.getElementById('grok-token-count');
+            const previewText = document.getElementById('grok-token-preview');
+
+            try {
+                const resp = await fetch(`${GROK_URL}/admin/api/tokens`, {
+                    headers: {
+                        'Authorization': 'Bearer grok2api'
+                    }
+                });
+                if (!resp.ok) throw new Error('Unauthorized or Offline');
+                const result = await resp.json();
+                const tokens = result.tokens || [];
+
+                if (tokens.length > 0) {
+                    statusDot.className = 'health-dot healthy';
+                    statusText.textContent = 'ACTIVE';
+                    statusText.style.color = 'var(--success)';
+                    countText.textContent = `${tokens.length} token(s) hoạt động`;
+                    
+                    const t = tokens[0];
+                    const masked = t.token.substring(0, 15) + '...' + t.token.substring(t.token.length - 10);
+                    previewText.textContent = `Token [${t.status}]: ${masked}`;
+                } else {
+                    statusDot.className = 'health-dot unhealthy';
+                    statusText.textContent = 'NO TOKENS';
+                    statusText.style.color = 'var(--danger)';
+                    countText.textContent = 'Chưa nạp token nào';
+                    previewText.textContent = '';
+                }
+            } catch (err) {
+                statusDot.className = 'health-dot unhealthy';
+                statusText.textContent = 'OFFLINE';
+                statusText.style.color = 'var(--text-muted)';
+                countText.textContent = 'Grok API Gateway is offline';
+                previewText.textContent = '';
+            }
+        }
+
+        async function addGrokToken() {
+            const input = document.getElementById('sso-cookie-input');
+            const tokenValue = input.value.trim();
+
+            if (!tokenValue) {
+                showToast('⚠️ Vui lòng nhập cookie token!');
+                return;
+            }
+
+            try {
+                const resp = await fetch(`${GROK_URL}/admin/api/tokens/add`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer grok2api',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tokens: [tokenValue]
+                    })
+                });
+
+                const result = await resp.json();
+                if (resp.ok) {
+                    showToast('✅ Đã nạp token thành công!');
+                    input.value = '';
+                    checkGrokTokens();
+                } else {
+                    showToast(`❌ Lỗi: ${result.detail || 'Không xác định'}`);
+                }
+            } catch (err) {
+                showToast(`❌ Lỗi kết nối Grok Gateway: ${err.message}`);
+            }
         }
 
         // === HELPERS ===
@@ -601,10 +919,14 @@
         }
 
         // === INIT ===
-        window.addEventListener('DOMContentLoaded', () => {
-            loadMemories();
-            loadStats();
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initConfig();
+            if (configLoaded) {
+                loadMemories();
+                loadStats();
+            }
             checkHealth();
+            checkGrokTokens();
         });
     </script>
 </body>

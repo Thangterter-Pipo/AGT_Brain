@@ -355,16 +355,21 @@ Script sẽ quét thư mục conversation logs và tạo ra:
 
 ### Web Admin Dashboard
 
+Để tránh các lỗi bảo mật CORS khi gọi API cục bộ và cho phép Dashboard tự động nạp cấu hình, hãy khởi chạy Web Server từ thư mục gốc:
+
 ```bash
-# Mở dashboard trực tiếp trong trình duyệt
-start scripts/dashboard.html
+# Khởi chạy local Web Server bằng Python
+python -m http.server 8080
+
+# Truy cập Dashboard qua địa chỉ
+http://localhost:8080/scripts/dashboard.html
 ```
 
 Tính năng:
-- 📋 Trình duyệt ký ức Supabase đầy đủ bộ lọc (agent, category, importance).
-- 📊 Biểu đồ stats thời gian thực (số lượng memory theo agent, archive).
-- 🏥 Kiểm tra sức khỏe kết nối API (Supabase, Grok).
-- 🔍 Tìm kiếm keyword nhanh.
+- ⚙️ **Dynamic Config Auto-Loader**: Tự động đọc cấu hình từ file `data/supabase_config.json` cục bộ khi chạy qua Web Server, giúp bảo mật key tuyệt đối và không cần khai báo tĩnh vào mã nguồn HTML.
+- 🦉 **Grok Token Manager**: Giám sát trạng thái hoạt động của Grok SSO token trong `grok2api` local, đồng thời hỗ trợ nạp hoặc cập nhật token bằng tay trực tiếp qua giao diện.
+- 📋 **Trình duyệt ký ức nâng cao**: Giao diện tối dạng kính mờ (Glassmorphism), hiển thị và tìm kiếm nhanh các ký ức dài hạn trên Supabase Cloud với đầy đủ bộ lọc (agent, category, importance).
+- 📊 **Biểu đồ thống kê & API Health**: Thống kê số lượng ký ức theo Agent và đo lường thời gian trễ (latency) kết nối của các dịch vụ API.
 
 ### Rust API Example
 
