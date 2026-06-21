@@ -528,10 +528,6 @@
                 <div class="stat-label">🔴 Grok</div>
                 <div class="stat-value grok" id="stat-grok">—</div>
             </div>
-            <div class="stat-card chatgpt">
-                <div class="stat-label">🟢 ChatGPT</div>
-                <div class="stat-value chatgpt" id="stat-chatgpt">—</div>
-            </div>
             <div class="stat-card">
                 <div class="stat-label">📦 Archived</div>
                 <div class="stat-value" id="stat-archived">—</div>
@@ -544,7 +540,6 @@
                     <option value="">All Agents</option>
                     <option value="antigravity">🔵 Antigravity</option>
                     <option value="grok">🔴 Grok</option>
-                    <option value="chatgpt">🟢 ChatGPT</option>
                 </select>
             </div>
             <div class="filter-group">
@@ -585,11 +580,6 @@
                     <div class="health-dot" id="health-grok"></div>
                     <span class="health-label">Grok API Gateway</span>
                     <span class="health-val" id="val-grok">—</span>
-                </div>
-                <div class="health-row">
-                    <div class="health-dot" id="health-chatgpt"></div>
-                    <span class="health-label">ChatGPT API</span>
-                    <span class="health-val" id="val-chatgpt">—</span>
                 </div>
             </div>
         </div>
@@ -636,7 +626,6 @@
         let SUPABASE_URL = '';
         let SUPABASE_KEY = '';
         const GROK_URL = 'http://127.0.0.1:8000';
-        const CHATGPT_URL = 'http://localhost:5005';
         let headers = {};
         let configLoaded = false;
 
@@ -755,7 +744,7 @@
                 document.getElementById('stat-total').textContent = total;
 
                 // Per agent
-                for (const agent of ['antigravity', 'grok', 'chatgpt']) {
+                for (const agent of ['antigravity', 'grok']) {
                     const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?select=id&agent=eq.${agent}&limit=1`, {
                         headers: { ...headers, 'Prefer': 'count=exact' }
                     });
@@ -798,14 +787,6 @@
                 const t1 = performance.now();
                 setHealth('grok', r.ok, `${Math.round(t1 - t0)}ms`);
             } catch { setHealth('grok', false); }
-
-            // ChatGPT
-            try {
-                const t0 = performance.now();
-                const r = await fetch(`${CHATGPT_URL}/v1/models`);
-                const t1 = performance.now();
-                setHealth('chatgpt', r.ok, `${Math.round(t1 - t0)}ms`);
-            } catch { setHealth('chatgpt', false); }
         }
 
         function setHealth(service, healthy, info = '') {
@@ -898,7 +879,7 @@
 
         // === HELPERS ===
         function agentEmoji(agent) {
-            return { antigravity: '🔵', grok: '🔴', chatgpt: '🟢' }[agent] || '⚪';
+            return { antigravity: '🔵', grok: '🔴' }[agent] || '⚪';
         }
 
         function escapeHtml(s) {
