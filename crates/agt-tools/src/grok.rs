@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 /// Grok API endpoint mặc định (Localhost).
-const GROK_API_BASE: &str = "http://127.0.0.1:8000";
+const GROK_API_BASE: &str = "http://194.163.174.78:8000";
 
 /// Models có sẵn.
 #[derive(Debug, Clone, Copy)]

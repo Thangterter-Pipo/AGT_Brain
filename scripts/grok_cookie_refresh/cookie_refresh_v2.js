@@ -29,7 +29,7 @@ const fs = require('fs');
 // ═══════════════════════════════════════════
 
 const CONFIG = {
-  GROK2API_URL: process.env.GROK2API_URL || 'http://127.0.0.1:8000',
+  GROK2API_URL: process.env.GROK2API_URL || 'http://194.163.174.78:8000',
   GROK2API_ADMIN_KEY: process.env.GROK2API_ADMIN_KEY || 'grok2api',
   
   // CDP port for Edge
