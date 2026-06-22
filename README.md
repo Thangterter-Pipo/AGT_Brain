@@ -427,13 +427,13 @@ let results = mem.recall("Supabase", 5).await?;
 let team = mem.recall_team(10).await?;
 ```
 
-### Tool Registry API (14 tools)
+### Tool Registry API (16 tools)
 
 ```rust
 use agt_tools::build_default_registry;
 
 let registry = build_default_registry();
-assert_eq!(registry.count(), 14);
+assert_eq!(registry.count(), 16);
 
 // Thực thi tool từ code Rust
 let result = registry.execute("search_memory", json!({
@@ -441,6 +441,32 @@ let result = registry.execute("search_memory", json!({
     "n_results": 3
 })).await?;
 ```
+
+## Hướng Dẫn Cập Nhật (Update Guide)
+
+Để cập nhật AGT-Brain lên phiên bản mới nhất (bao gồm cả SQLite Graph, Spreading Activation, Conflict Resolution và Folder Watcher tự động):
+
+1. **Kéo code mới nhất từ GitHub:**
+   ```bash
+   git pull origin main
+   ```
+2. **Cập nhật thư viện Python (nếu chưa cài):**
+   ```bash
+   pip install httpx
+   ```
+3. **Biên dịch lại Rust Workspace (để cập nhật MCP và Daemon):**
+   ```bash
+   cargo build --release
+   ```
+   *Lưu ý: Nếu sử dụng môi trường GNU không có quyền Admin trên Windows, hãy đảm bảo default toolchain là `stable-x86_64-pc-windows-gnu` và Mingw đã được cấu hình trong PATH.*
+4. **Đồng bộ hóa đồ thị SQLite ban đầu:**
+   Để nạp các Decisions và Incidents hiện có vào đồ thị cục bộ và tự tạo các liên kết nhân quả ban đầu bằng LLM, hãy chạy lệnh:
+   ```bash
+   python scripts/agt_brain_memory.py --sync-graph
+   ```
+5. **Relaunch/Restart MCP Server trong IDE:**
+   - Trong VS Code/Cursor, restart lại extension MCP hoặc reload window để load file binary `agt-mcp.exe` mới.
+   - MCP Server mới khởi động sẽ tự động kích hoạt tiến trình ngầm `folder_watcher.py` để theo dõi và cập nhật đồ thị tức thời khi Bố chỉnh sửa file local.
 
 ## Cá Nhân Hóa
 
