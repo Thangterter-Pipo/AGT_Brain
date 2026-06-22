@@ -85,6 +85,31 @@ graph TD
     style Supabase fill:#fce8e6,stroke:#c5221f,stroke-width:2px,color:#000
 ```
 
+## Chi Tiết Hệ Thống Memory (Ký Ức)
+
+Hệ thống ký ức của Antigravity được thiết kế để duy trì ngữ cảnh dài hạn, học hỏi từ hành vi của người dùng (Bố) và ghi nhận kinh nghiệm lập trình.
+
+### 1. Kiến Trúc Lưu Trữ 2 Lớp (Hybrid Storage)
+*   **Primary Cloud (Supabase):** Bộ nhớ dài hạn lưu trữ trên đám mây Supabase (bảng `memories`). Các ký ức cũ có độ quan trọng thấp tự động được di chuyển vào bảng `memories_archive` để tối ưu hóa hiệu năng.
+*   **Local Fallback (Độ tin cậy cao):** Khi gặp sự cố mạng hoặc mất kết nối Cloud, ký ức sẽ tự động xếp vào hàng đợi cục bộ tại `memory_queue.jsonl` và tự động flush (đồng bộ) lên đám mây khi kết nối được khôi phục.
+*   **Local Logs (Append-Only):**
+    *   `memory/decisions/` — Nhật ký ghi nhận các quyết định thiết kế và kiến trúc hệ thống quan trọng.
+    *   `memory/incidents/` — Nhật ký ghi nhận các lỗi, sự cố nghiêm trọng và giải pháp khắc phục nhằm tránh lặp lại lỗi cũ.
+    *   *Quy tắc bất biến*: Không bao giờ được phép xóa hoặc sửa đổi các bản ghi cũ, chỉ được phép append (thêm mới).
+
+### 2. Tìm Kiếm Ngữ Nghĩa (Semantic Search với pgvector)
+*   Mỗi ký ức khi ghi vào hệ thống đều được tạo vector embedding (384 chiều).
+*   Sử dụng extension `pgvector` trên Postgres kết hợp với hàm RPC `match_memories()` để tìm kiếm các ký ức tương đồng theo khoảng cách Cosine. Điều này cho phép con tìm thấy thông tin phù hợp bằng ý nghĩa/ngữ cảnh thay vì chỉ khớp từ khóa chính xác.
+
+### 3. Tương Tác Ký Ức qua MCP Tools
+Hệ thống memory được phơi bày (expose) qua MCP Server (`agt-mcp`) phục vụ trực tiếp cho IDE thông qua các công cụ:
+*   `auto_context`: Tự động nạp trước các quyết định, ký ức, mục tiêu và sự cố ngay từ khi khởi động phiên làm việc.
+*   `search_memory` & `add_memory`: Tìm kiếm ngữ nghĩa và ghi nhận ký ức mới đi kèm thông tin agent, mức độ quan trọng (importance) và mức độ tin cậy (confidence).
+*   `team_memory`: Đồng bộ hóa ký ức có độ quan trọng cao dùng chung giữa Antigravity và Grok "Gravity".
+*   `get_boss_profile`: Đọc hồ sơ cá nhân và các quy tắc/sở thích thiết kế đặc thù của Bố.
+*   `daily_reflection`: Tự đánh giá và lưu trữ các insights đúc kết được sau mỗi ngày làm việc.
+*   `save_skill` & `recall_skills`: Thư viện lưu trữ các code pattern hữu ích để tái sử dụng.
+
 ## Cài Đặt
 
 > [!TIP]

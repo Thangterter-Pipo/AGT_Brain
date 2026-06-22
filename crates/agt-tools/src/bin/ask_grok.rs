@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
                 role: "user".to_string(),
                 content: args.prompt,
             }];
-            grok.chat(messages, model).await?
+            grok.chat(messages, model.as_str()).await?
         }
     };
 

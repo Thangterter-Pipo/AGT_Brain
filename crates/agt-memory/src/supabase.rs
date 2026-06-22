@@ -270,6 +270,48 @@ impl SupabaseMemory {
         Ok(count)
     }
 
+    /// Move a specific list of memories to memories_archive.
+    pub async fn archive_memories(&self, memories: &[Memory]) -> Result<()> {
+        if memories.is_empty() {
+            return Ok(());
+        }
+
+        let count = memories.len();
+        
+        // Step 1: Insert into memories_archive
+        let req = self.client
+            .post(format!("{}/rest/v1/memories_archive", self.url))
+            .header("Prefer", "return=minimal")
+            .json(memories);
+        let resp = self.auth_headers(req).send().await?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("Archive insert failed: {body}"));
+        }
+
+        // Step 2: Delete from memories
+        let ids: Vec<String> = memories.iter()
+            .filter_map(|m| m.id.as_ref().map(|id| id.to_string()))
+            .collect();
+
+        if !ids.is_empty() {
+            let id_filter = format!("in.({})", ids.join(","));
+            let req = self.client
+                .delete(format!("{}/rest/v1/memories", self.url))
+                .query(&[("id", &id_filter)]);
+            let resp = self.auth_headers(req).send().await?;
+
+            if !resp.status().is_success() {
+                let body = resp.text().await.unwrap_or_default();
+                return Err(anyhow!("Archive delete failed: {body}"));
+            }
+        }
+
+        eprintln!("✅ Successfully moved {count} memories to archive");
+        Ok(())
+    }
+
     /// Get memory statistics.
     pub async fn stats(&self) -> Result<serde_json::Value> {
         // Count total memories

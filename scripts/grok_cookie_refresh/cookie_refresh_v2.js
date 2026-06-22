@@ -154,6 +154,18 @@ async function getBrowserCdpUrl() {
   return resp.data.webSocketDebuggerUrl;
 }
 
+async function getEdgeUserAgent() {
+  try {
+    const resp = await httpReq('GET', `http://127.0.0.1:${CONFIG.CDP_PORT}/json/version`);
+    if (resp.status === 200 && resp.data && resp.data['User-Agent']) {
+      return resp.data['User-Agent'];
+    }
+  } catch (e) {
+    log('⚠️', `Failed to get Edge User-Agent from CDP: ${e.message}`);
+  }
+  return null;
+}
+
 /**
  * Extract cookies from a CDP target for grok.com domain
  */
@@ -221,11 +233,39 @@ async function extractFlow() {
   log('🔄', 'Extracting grok.com cookies from Edge via CDP...');
   
   try {
+    // Force reload/navigation to grok.com to trigger cookie refresh handshake
+    try {
+      const targets = await getCdpTargets();
+      const pageTarget = targets.find(t => t.type === 'page' && t.webSocketDebuggerUrl);
+      if (pageTarget) {
+        log('🔄', `Navigating tab "${pageTarget.title}" to ${CONFIG.GROK_URL} to refresh session...`);
+        await cdpCommand(pageTarget.webSocketDebuggerUrl, 'Page.navigate', { url: CONFIG.GROK_URL });
+        log('⏳', 'Waiting 5s for session refresh handshake...');
+        await sleep(5000);
+      }
+    } catch (e) {
+      log('⚠️', `Failed to force reload tab: ${e.message}`);
+    }
+
     const cookies = await extractCookiesViaCdp();
     
     if (cookies.length === 0) {
       log('❌', 'No cookies found. Make sure you are logged into grok.com in Edge.');
       return;
+    }
+    
+    // Try to get actual Edge User-Agent
+    const actualUa = await getEdgeUserAgent();
+    
+    // Find cf_clearance cookie (prioritize .grok.com domain)
+    const cfClearanceCookie = cookies.find(c => c.name === 'cf_clearance' && c.domain.includes('grok.com')) 
+      || cookies.find(c => c.name === 'cf_clearance');
+    const cfClearance = cfClearanceCookie ? cfClearanceCookie.value : null;
+    
+    if (cfClearance) {
+      log('🛡️', `Found cf_clearance: ${cfClearance.substring(0, 15)}... (domain: ${cfClearanceCookie.domain})`);
+    } else {
+      log('⚠️', 'No cf_clearance cookie found.');
     }
     
     // Look for SSO-related cookies
@@ -279,7 +319,7 @@ async function extractFlow() {
     log('💾', `Cookie backed up to ${backupPath}`);
     
     // Push to grok2api
-    await pushToGrok2Api(ssoToken);
+    await pushToGrok2Api(ssoToken, cfClearance, actualUa, cookies);
     
   } catch (err) {
     if (err.message.includes('ECONNREFUSED')) {
@@ -345,8 +385,50 @@ async function autoFlow() {
 /**
  * Push SSO token to grok2api
  */
-async function pushToGrok2Api(ssoToken) {
-  log('🚀', 'Pushing token to grok2api...');
+async function pushToGrok2Api(ssoToken, cfClearance = null, actualUa = null, cookies = []) {
+  log('🚀', 'Pushing token and config to grok2api...');
+  
+  try {
+    // 1. Update config if cfClearance, actualUa or cookies is provided
+    if (cfClearance || actualUa || cookies.length > 0) {
+      log('⚙️', 'Updating grok2api proxy configuration (cf_clearance, cf_cookies & user_agent)...');
+      
+      const configPatch = {
+        proxy: {
+          clearance: {}
+        }
+      };
+      
+      if (cfClearance) {
+        configPatch.proxy.clearance.cf_clearance = cfClearance;
+      }
+      
+      if (cookies.length > 0) {
+        const excludedCookieNames = ['sso', 'sso_rw', 'sso-rw', 'cf_clearance'];
+        const filteredCookies = cookies.filter(c => !excludedCookieNames.includes(c.name));
+        const cfCookiesStr = filteredCookies.map(c => `${c.name}=${c.value}`).join('; ');
+        log('🍪', `Built cf_cookies string of length: ${cfCookiesStr.length}`);
+        if (cfCookiesStr) {
+          configPatch.proxy.clearance.cf_cookies = cfCookiesStr;
+        }
+      }
+      
+      if (actualUa) {
+        configPatch.proxy.clearance.user_agent = actualUa;
+      }
+      
+      log('⚙️', `Sending config patch: ${JSON.stringify(configPatch)}`);
+      
+      const configResp = await httpReq('POST', `${CONFIG.GROK2API_URL}/admin/api/config`, configPatch);
+      if (configResp.status === 200) {
+        log('✅', 'Proxy config updated successfully on grok2api!');
+      } else {
+        log('⚠️', `Failed to update proxy config on grok2api: ${configResp.status} — ${JSON.stringify(configResp.data)}`);
+      }
+    }
+  } catch (err) {
+    log('⚠️', `Failed to update config on grok2api: ${err.message}`);
+  }
   
   try {
     // Check existing tokens
@@ -361,7 +443,7 @@ async function pushToGrok2Api(ssoToken) {
         // Replace the existing token with the new one
         const oldToken = existing[0].token;
         if (oldToken === ssoToken) {
-          log('✅', 'Token unchanged, skipping update.');
+          log('✅', 'Token unchanged.');
           return;
         }
         

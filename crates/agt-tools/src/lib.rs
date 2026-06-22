@@ -75,7 +75,7 @@ impl Registry {
     }
 }
 
-/// Build a registry with all 14 built-in tools pre-registered.
+/// Build a registry with all 16 built-in tools pre-registered.
 pub fn build_default_registry() -> Registry {
     let mut r = Registry::new();
 
@@ -113,8 +113,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_14_tools() {
+    fn registry_has_16_tools() {
         let r = build_default_registry();
-        assert_eq!(r.count(), 14, "Registry should have 14 function-based tools (CDP controller is struct-based, not in registry)");
+        assert_eq!(r.count(), 16, "Registry should have 16 function-based tools (CDP controller is struct-based, not in registry)");
     }
 }

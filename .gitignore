@@ -39,3 +39,13 @@ agt-mcp
 # Scratch
 scratch/
 
+# Portable Toolchain
+mingw/
+
+# Screenshots & Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+

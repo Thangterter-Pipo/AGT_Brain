@@ -9,6 +9,7 @@
 
 use clap::Parser;
 use chrono::Local;
+use anyhow::Result;
 
 #[derive(Parser, Debug)]
 #[command(name = "brain-cron", about = "🧠 Antigravity Brain — Autonomous Scheduler")]
@@ -147,6 +148,28 @@ async fn run_daily_reflection() -> String {
     reflection
 }
 
+async fn run_dream_compression() -> Result<()> {
+    let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+    let script_path = format!("{base_dir}\\scripts\\agt_brain_memory.py");
+
+    println!("💤 [Dreaming] Calling Python unified memory engine to run dreaming...");
+    let output = std::process::Command::new("python")
+        .arg(&script_path)
+        .arg("--dream")
+        .output()?;
+
+    if output.status.success() {
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        println!("{stdout_str}");
+        println!("✅ [Dreaming] Memory compression cycle completed successfully!");
+    } else {
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
+        eprintln!("⚠️ Memory compression failed:\n{stderr_str}");
+        return Err(anyhow::anyhow!("Python dreaming execution failed"));
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
@@ -160,6 +183,17 @@ async fn main() {
     }
 
     if args.daemon {
+        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let watcher_path = format!("{base_dir}\\scripts\\folder_watcher.py");
+
+        println!("🚀 Starting folder watcher in background...");
+        match std::process::Command::new("python")
+            .arg(&watcher_path)
+            .spawn() {
+            Ok(_) => println!("✅ Folder watcher launched successfully."),
+            Err(e) => eprintln!("⚠️ Failed to launch folder watcher: {e}"),
+        }
+
         let interval = std::time::Duration::from_secs(args.interval * 3600);
         println!("🧠 brain-cron daemon started — interval: {}h", args.interval);
         println!("   Press Ctrl+C to stop.\n");
@@ -169,12 +203,31 @@ async fn main() {
             println!("⏰ [{now}] Running scheduled reflection...");
             let result = run_daily_reflection().await;
             println!("{result}\n");
+
+            println!("💤 [{now}] Running background memory compression (Dreaming)...");
+            if let Err(e) = run_dream_compression().await {
+                eprintln!("⚠️ Memory compression failed: {e}");
+            }
+
             println!("💤 Sleeping {}h until next run...\n", args.interval);
             tokio::time::sleep(interval).await;
         }
     } else {
         println!("🧠 Running one-shot reflection...\n");
         let result = run_daily_reflection().await;
-        println!("{result}");
+        println!("{result}\n");
+
+        println!("💤 Running one-shot memory compression (Dreaming)...");
+        if let Err(e) = run_dream_compression().await {
+            eprintln!("⚠️ Memory compression failed: {e}");
+        }
+
+        println!("🔄 Running one-shot SQLite Graph Sync...");
+        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let script_path = format!("{base_dir}\\scripts\\agt_brain_memory.py");
+        let _ = std::process::Command::new("python")
+            .arg(&script_path)
+            .arg("--sync-graph")
+            .status();
     }
 }

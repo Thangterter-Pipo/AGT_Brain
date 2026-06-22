@@ -5,15 +5,37 @@ use rmcp::ServerHandler;
 use rmcp::ServiceExt;
 use rmcp::model::*;
 use rmcp::tool;
+use std::process::Command;
 
 #[derive(Debug, Clone)]
 struct AgentMcp;
 
 #[tool(tool_box)]
 impl AgentMcp {
-    /// Tìm kiếm thông tin từ bộ nhớ dài hạn dựa trên ngữ nghĩa.
-    #[tool(description = "Search memories by keyword. Optionally filter by agent (antigravity/grok).")]
+    /// Tìm kiếm thông tin từ bộ nhớ dài hạn dựa trên ngữ nghĩa và liên tưởng đồ thị SQLite.
+    #[tool(description = "Search memories by keyword. Combines Spreading Activation (SQLite Graph) and Fallback Vector Search.")]
     async fn search_memory(&self, #[tool(param)] query: String, #[tool(param)] n_results: Option<u64>, #[tool(param)] agent: Option<String>) -> String {
+        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let script_path = format!("{base_dir}\\scripts\\agt_brain_memory.py");
+
+        // Gọi Python script để thực hiện Spreading Activation query
+        match Command::new("python")
+            .arg(&script_path)
+            .arg("--query")
+            .arg(&query)
+            .output() {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+                    if stdout_str.trim().contains("Spreading Activation Results") {
+                        return stdout_str;
+                    }
+                }
+            }
+            Err(_) => {} // Python ko chạy được hoặc lỗi, fallback xuống dưới
+        }
+
+        // Fallback: Tìm kiếm trực tiếp bằng Supabase vector search như cũ
         let limit = n_results.unwrap_or(5) as usize;
         let config = get_config_path();
         match agt_memory::SupabaseMemory::from_config(&config) {
@@ -38,8 +60,8 @@ impl AgentMcp {
         }
     }
 
-    /// Ghi lại một thông tin quan trọng vào bộ nhớ dài hạn.
-    #[tool(description = "Save important information to long-term shared memory. Optionally specify agent and category.")]
+    /// Ghi lại một thông tin quan trọng vào bộ nhớ dài hạn có kiểm tra mâu thuẫn LLM-assisted.
+    #[tool(description = "Save important information to long-term shared memory with conflict resolution. Optionally specify agent and category.")]
     async fn add_memory(
         &self,
         #[tool(param)] message: String,
@@ -49,16 +71,44 @@ impl AgentMcp {
         #[tool(param)] category: Option<String>,
         #[tool(param)] importance: Option<i16>,
     ) -> String {
+        let agent_str = agent.unwrap_or_else(|| "antigravity".to_string());
+        let category_str = category.unwrap_or_else(|| "general".to_string());
+        let importance_val = importance.unwrap_or(3);
+
+        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let script_path = format!("{base_dir}\\scripts\\agt_brain_memory.py");
+
+        // Gọi Python script để xử lý Conflict Resolution (Mem0-style) và lưu vào Supabase
+        match Command::new("python")
+            .arg(&script_path)
+            .arg("--save")
+            .arg(&message)
+            .arg("--agent")
+            .arg(&agent_str)
+            .arg("--category")
+            .arg(&category_str)
+            .arg("--importance")
+            .arg(importance_val.to_string())
+            .output() {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+                    if stdout_str.trim().contains("Memory saved") || stdout_str.trim().contains("updated successfully") {
+                        return stdout_str;
+                    }
+                }
+            }
+            Err(_) => {} // Fallback to direct supabase save
+        }
+
+        // Fallback: Lưu trực tiếp lên Supabase
         let speaker = speaker.unwrap_or_else(|| "User".to_string());
-        let agent = agent.unwrap_or_else(|| "antigravity".to_string());
-        let category = category.unwrap_or_else(|| "general".to_string());
-        let importance = importance.unwrap_or(3);
         let config = get_config_path();
         match agt_memory::SupabaseMemory::from_config(&config) {
             Ok(mem) => {
                 let metadata = serde_json::json!({ "context": context.unwrap_or_else(|| "general".to_string()) });
-                match mem.remember_as(&message, &speaker, &agent, &category, importance, 3, &metadata).await {
-                    Ok(()) => format!("✅ Đã ghi nhớ [{agent}/{category}/imp:{importance}]: '{message}'"),
+                match mem.remember_as(&message, &speaker, &agent_str, &category_str, importance_val, 3, &metadata).await {
+                    Ok(()) => format!("✅ Đã ghi nhớ (Direct Fallback) [{agent_str}/{category_str}/imp:{importance_val}]: '{message}'"),
                     Err(e) => format!("❌ Save error: {e}"),
                 }
             }
@@ -435,6 +485,18 @@ fn get_config_path() -> String {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     eprintln!("🚀 Antigravity MCP Server starting... (10 tools, auto-context + skills enabled)");
+    
+    // Spawn folder watcher in the background to automatically sync changes
+    let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+    let watcher_path = format!("{base_dir}\\scripts\\folder_watcher.py");
+    eprintln!("🚀 Launching local memory watcher from MCP Server...");
+    match std::process::Command::new("python")
+        .arg(&watcher_path)
+        .spawn() {
+        Ok(_) => eprintln!("✅ Memory watcher spawned successfully."),
+        Err(e) => eprintln!("⚠️ Failed to spawn memory watcher from MCP: {e}"),
+    }
+
     let service = AgentMcp.serve(rmcp::transport::io::stdio()).await
         .inspect_err(|e| eprintln!("❌ MCP Server error: {e}"))?;
     service.waiting().await?;
