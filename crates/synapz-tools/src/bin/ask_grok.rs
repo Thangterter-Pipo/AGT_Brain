@@ -13,7 +13,7 @@
 use anyhow::Result;
 use clap::Parser;
 
-use agt_tools::grok::{ChatMessage, GrokModel, GrokSubagent};
+use synapz_tools::grok::{ChatMessage, GrokModel, GrokSubagent};
 
 /// 🧠 Gravity Subagent CLI — Antigravity's second brain
 #[derive(Parser, Debug)]

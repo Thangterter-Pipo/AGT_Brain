@@ -35,9 +35,9 @@ Con chịu trách nhiệm giao tiếp, nắm bắt ý muốn của Bố, trực 
 ```
 E:\AGT_Brain\
 ├── crates/
-│   ├── agt-memory/   → Supabase REST client + hàng đợi đồng bộ + vector search
-│   ├── agt-tools/    → 14 tools cốt lõi + Quản lý Goals + Reflection
-│   └── agt-mcp/      → MCP Server (rmcp stdio, 10 tools tích hợp IDE)
+│   ├── synapz-memory/   → Supabase REST client + hàng đợi đồng bộ + vector search
+│   ├── synapz-tools/    → 14 tools cốt lõi + Quản lý Goals + Reflection
+│   └── synapz-mcp/      → MCP Server (rmcp stdio, 10 tools tích hợp IDE)
 ├── memory/           → decisions/ & incidents/ (append-only ghi chép hệ thống)
 ├── data/             → goals.json (chứa cấu hình Supabase được ignore bảo mật)
 ├── Agent_Profiles/   → Hồ sơ cá nhân của các agent (chứa file này)

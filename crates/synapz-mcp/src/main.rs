@@ -15,8 +15,8 @@ impl AgentMcp {
     /// Tìm kiếm thông tin từ bộ nhớ dài hạn dựa trên ngữ nghĩa và liên tưởng đồ thị SQLite.
     #[tool(description = "Search memories by keyword. Combines Spreading Activation (SQLite Graph) and Fallback Vector Search.")]
     async fn search_memory(&self, #[tool(param)] query: String, #[tool(param)] n_results: Option<u64>, #[tool(param)] agent: Option<String>) -> String {
-        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
-        let script_path = format!("{base_dir}\\scripts\\agt_brain_memory.py");
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let script_path = format!("{base_dir}\\scripts\\synapz_memory.py");
 
         // Gọi Python script để thực hiện Spreading Activation query
         match Command::new("python")
@@ -38,7 +38,7 @@ impl AgentMcp {
         // Fallback: Tìm kiếm trực tiếp bằng Supabase vector search như cũ
         let limit = n_results.unwrap_or(5) as usize;
         let config = get_config_path();
-        match agt_memory::SupabaseMemory::from_config(&config) {
+        match synapz_memory::SupabaseMemory::from_config(&config) {
             Ok(mem) => {
                 let results = if let Some(ref agent) = agent {
                     mem.recall_by_agent(agent, limit).await
@@ -75,8 +75,8 @@ impl AgentMcp {
         let category_str = category.unwrap_or_else(|| "general".to_string());
         let importance_val = importance.unwrap_or(3);
 
-        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
-        let script_path = format!("{base_dir}\\scripts\\agt_brain_memory.py");
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let script_path = format!("{base_dir}\\scripts\\synapz_memory.py");
 
         // Gọi Python script để xử lý Conflict Resolution (Mem0-style) và lưu vào Supabase
         match Command::new("python")
@@ -104,7 +104,7 @@ impl AgentMcp {
         // Fallback: Lưu trực tiếp lên Supabase
         let speaker = speaker.unwrap_or_else(|| "User".to_string());
         let config = get_config_path();
-        match agt_memory::SupabaseMemory::from_config(&config) {
+        match synapz_memory::SupabaseMemory::from_config(&config) {
             Ok(mem) => {
                 let metadata = serde_json::json!({ "context": context.unwrap_or_else(|| "general".to_string()) });
                 match mem.remember_as(&message, &speaker, &agent_str, &category_str, importance_val, 3, &metadata).await {
@@ -122,7 +122,7 @@ impl AgentMcp {
     async fn team_memory(&self, #[tool(param)] limit: Option<u64>) -> String {
         let limit = limit.unwrap_or(5) as usize;
         let config = get_config_path();
-        match agt_memory::SupabaseMemory::from_config(&config) {
+        match synapz_memory::SupabaseMemory::from_config(&config) {
             Ok(mem) => {
                 match mem.recall_team(limit).await {
                     Ok(results) if results.is_empty() => "Chưa có team memory.".to_string(),
@@ -146,7 +146,7 @@ impl AgentMcp {
     #[tool(description = "Get boss profile and preferences from memory")]
     async fn get_boss_profile(&self) -> String {
         let config = get_config_path();
-        match agt_memory::SupabaseMemory::from_config(&config) {
+        match synapz_memory::SupabaseMemory::from_config(&config) {
             Ok(mem) => {
                 match mem.recall("Bố sở thích yêu cầu", 10).await {
                     Ok(results) if results.is_empty() => "Chưa có thông tin chi tiết về Bố.".to_string(),
@@ -179,7 +179,7 @@ impl AgentMcp {
             "model": model_name,
         });
 
-        match agt_tools::grok::ask_grok(params).await {
+        match synapz_tools::grok::ask_grok(params).await {
             Ok(result) => {
                 if let Some(response) = result.get("response").and_then(|v| v.as_str()) {
                     format!("🧠 [Grok/{mode}] {response}")
@@ -194,7 +194,7 @@ impl AgentMcp {
     /// Kiểm tra Grok API health.
     #[tool(description = "Check if Grok API is healthy and responsive")]
     async fn grok_health(&self) -> String {
-        match agt_tools::grok::grok_health(serde_json::json!({})).await {
+        match synapz_tools::grok::grok_health(serde_json::json!({})).await {
             Ok(result) => {
                 let healthy = result.get("healthy").and_then(|v| v.as_bool()).unwrap_or(false);
                 let endpoint = result.get("endpoint").and_then(|v| v.as_str()).unwrap_or("unknown");
@@ -218,11 +218,11 @@ impl AgentMcp {
     #[tool(description = "Auto-load critical context at session start. Returns: recent decisions, high-importance team memories, current goals, and last incident. Call this FIRST in every new conversation to instantly recover context.")]
     async fn auto_context(&self) -> String {
         let config = get_config_path();
-        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
         let mut sections: Vec<String> = Vec::new();
 
         // Section 1: High-importance team memories (importance >= 4)
-        if let Ok(mem) = agt_memory::SupabaseMemory::from_config(&config) {
+        if let Ok(mem) = synapz_memory::SupabaseMemory::from_config(&config) {
             match mem.recall_team(8).await {
                 Ok(results) => {
                     if !results.is_empty() {
@@ -333,13 +333,13 @@ impl AgentMcp {
     #[tool(description = "Daily self-reflection: review today's decisions, incidents, and team memories. Generates insights and improvement suggestions. Auto-saves reflection to memory.")]
     async fn daily_reflection(&self) -> String {
         let config = get_config_path();
-        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
         let mut digest_parts: Vec<String> = Vec::new();
 
         // Count today's memories
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
-        if let Ok(mem) = agt_memory::SupabaseMemory::from_config(&config) {
+        if let Ok(mem) = synapz_memory::SupabaseMemory::from_config(&config) {
             // Get recent memories
             match mem.recall_team(20).await {
                 Ok(results) => {
@@ -398,7 +398,7 @@ impl AgentMcp {
         };
 
         // Auto-save reflection to memory
-        if let Ok(mem) = agt_memory::SupabaseMemory::from_config(&config) {
+        if let Ok(mem) = synapz_memory::SupabaseMemory::from_config(&config) {
             let metadata = serde_json::json!({ "type": "daily_reflection", "date": today });
             let _ = mem.remember_as(&reflection, "Antigravity", "antigravity", "reflection", 5, 5, &metadata).await;
         }
@@ -426,7 +426,7 @@ impl AgentMcp {
             "tags": tags_str,
         });
 
-        match agt_memory::SupabaseMemory::from_config(&config) {
+        match synapz_memory::SupabaseMemory::from_config(&config) {
             Ok(mem) => {
                 match mem.remember_as(&content, "Antigravity", "antigravity", "skill", 5, 5, &metadata).await {
                     Ok(()) => format!("📚 Skill saved: '{name}' [tags: {tags_str}]\n  Problem: {problem}\n  Solution: {solution}"),
@@ -442,7 +442,7 @@ impl AgentMcp {
     #[tool(description = "Search saved skills/patterns by keyword. Returns matching skills with problem/solution pairs.")]
     async fn recall_skills(&self, #[tool(param)] query: String) -> String {
         let config = get_config_path();
-        match agt_memory::SupabaseMemory::from_config(&config) {
+        match synapz_memory::SupabaseMemory::from_config(&config) {
             Ok(mem) => {
                 // Search for skills specifically
                 let search_query = format!("SKILL {query}");
@@ -478,7 +478,7 @@ impl ServerHandler for AgentMcp {
 
 #[allow(dead_code)]
 fn get_config_path() -> String {
-    let base = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+    let base = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
     format!("{base}\\data\\supabase_config.json")
 }
 
@@ -487,7 +487,7 @@ async fn main() -> anyhow::Result<()> {
     eprintln!("🚀 Antigravity MCP Server starting... (10 tools, auto-context + skills enabled)");
     
     // Spawn folder watcher in the background to automatically sync changes
-    let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+    let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
     let watcher_path = format!("{base_dir}\\scripts\\folder_watcher.py");
     eprintln!("🚀 Launching local memory watcher from MCP Server...");
     match std::process::Command::new("python")

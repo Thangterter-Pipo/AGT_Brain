@@ -1,5 +1,5 @@
 [package]
-name = "agt-tools"
+name = "synapz-tools"
 version = "0.1.0"
 edition = "2024"
 
@@ -23,6 +23,6 @@ chrono = { workspace = true }
 glob = { workspace = true }
 anyhow = { workspace = true }
 clap = { version = "4", features = ["derive"] }
-agt-memory = { path = "../agt-memory" }
+synapz-memory = { path = "../synapz-memory" }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 futures-util = "0.3"

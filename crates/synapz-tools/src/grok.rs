@@ -347,10 +347,10 @@ pub async fn ask_grok(params: Value) -> Result<Value> {
     };
 
     // 🧠 Auto-save to shared memory (non-blocking — errors don't break the flow)
-    let config_path = std::env::var("AGT_BRAIN_ROOT")
+    let config_path = std::env::var("SYNAPZ_ROOT")
         .unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
     let config_file = format!("{}/data/supabase_config.json", config_path);
-    if let Ok(mem) = agt_memory::SupabaseMemory::from_config(&config_file) {
+    if let Ok(mem) = synapz_memory::SupabaseMemory::from_config(&config_file) {
         // Save prompt (who asked)
         let prompt_truncated = if prompt.len() > 500 { &prompt[..500] } else { prompt };
         let _ = mem.remember_as(

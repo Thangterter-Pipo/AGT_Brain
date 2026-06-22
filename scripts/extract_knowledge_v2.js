@@ -237,7 +237,7 @@ function generateHTMLViewer(knowledgeBase, stats) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🧠 Antigravity Knowledge Base</title>
+  <title>🧠 SynapzCore Knowledge Base</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
@@ -341,7 +341,7 @@ function generateHTMLViewer(knowledgeBase, stats) {
 <body>
   <div class="container">
     <div class="header">
-      <h1>🧠 Antigravity Knowledge Base</h1>
+      <h1>🧠 SynapzCore Knowledge Base</h1>
       <div class="subtitle">Extracted from ${stats.total_conversations} conversations • ${stats.date_range.from.substring(0, 10)} → ${stats.date_range.to.substring(0, 10)}</div>
       
       <div class="stats-grid">

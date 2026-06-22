@@ -1,4 +1,4 @@
-//! Memory tools — wrappers around agt-memory for tool registry.
+//! Memory tools — wrappers around synapz-memory for tool registry.
 //! Supports shared memory across all 3 agents.
 
 use anyhow::{anyhow, Result};
@@ -13,7 +13,7 @@ pub async fn remember(params: Value) -> Result<Value> {
     let agent = params.get("agent").and_then(|v| v.as_str());
 
     let config = get_config_path();
-    let mem = agt_memory::SupabaseMemory::from_config(&config)?;
+    let mem = synapz_memory::SupabaseMemory::from_config(&config)?;
 
     let results = if let Some(agent) = agent {
         mem.recall_by_agent(agent, limit).await?
@@ -45,7 +45,7 @@ pub async fn save_memory(params: Value) -> Result<Value> {
     let importance = params.get("importance").and_then(|v| v.as_i64()).unwrap_or(3) as i16;
 
     let config = get_config_path();
-    let mem = agt_memory::SupabaseMemory::from_config(&config)?;
+    let mem = synapz_memory::SupabaseMemory::from_config(&config)?;
     let metadata = json!({ "context": context });
     mem.remember_as(message, speaker, agent, category, importance, 3, &metadata).await?;
 
@@ -54,7 +54,7 @@ pub async fn save_memory(params: Value) -> Result<Value> {
 
 pub async fn recall_boss(_params: Value) -> Result<Value> {
     let config = get_config_path();
-    let mem = agt_memory::SupabaseMemory::from_config(&config)?;
+    let mem = synapz_memory::SupabaseMemory::from_config(&config)?;
     let results = mem.recall("Bố sở thích yêu cầu", 10).await?;
 
     let formatted: Vec<String> = results.iter()
@@ -72,7 +72,7 @@ pub async fn recall_boss(_params: Value) -> Result<Value> {
 pub async fn recall_team(params: Value) -> Result<Value> {
     let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
     let config = get_config_path();
-    let mem = agt_memory::SupabaseMemory::from_config(&config)?;
+    let mem = synapz_memory::SupabaseMemory::from_config(&config)?;
     let results = mem.recall_team(limit).await?;
 
     let formatted: Vec<Value> = results.iter().map(|m| {
@@ -107,6 +107,6 @@ pub async fn search_code(params: Value) -> Result<Value> {
 }
 
 fn get_config_path() -> String {
-    let base = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+    let base = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
     format!("{base}\\data\\supabase_config.json")
 }

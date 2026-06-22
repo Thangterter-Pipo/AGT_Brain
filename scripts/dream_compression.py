@@ -11,7 +11,7 @@ import httpx
 from datetime import datetime, timezone
 
 def get_config_path():
-    base_dir = os.environ.get("AGT_BRAIN_ROOT", "E:\\AGT_Brain")
+    base_dir = os.environ.get("SYNAPZ_ROOT", "E:\\AGT_Brain")
     return os.path.join(base_dir, "data", "supabase_config.json")
 
 def main():
@@ -77,7 +77,7 @@ def main():
         text_to_compress += f"- ID: {m.get('id')}, Agent: {m.get('agent')}, Category: {m.get('category')}, Content: {m.get('content')}\n"
 
     system_prompt = (
-        "You are Antigravity Dreaming Engine — a system process that runs while the AI agent sleeps to synthesize raw episodic memories into a structured semantic summary.\n\n"
+        "You are SynapzCore Dreaming Engine — a system process that runs while the AI agent sleeps to synthesize raw episodic memories into a structured semantic summary.\n\n"
         "Your goal is to compress the provided raw memories of recent user interactions, system context, preferences, and issues into a concise, high-value bullet-point list.\n"
         "Requirements:\n"
         "- Group information logically (e.g., User Context & Preferences, Architecture Decisions, Solved Incidents).\n"

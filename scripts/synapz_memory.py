@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-agt_brain_memory.py — Unified Antigravity Memory Engine.
+synapz_memory.py — Unified SynapzCore Memory Engine.
 Integrates:
   1. Honcho-style Dreaming & Context Compression
   2. SQLite Knowledge Graph & Spreading Activation Recall
@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Paths configuration
-BASE_DIR = os.environ.get("AGT_BRAIN_ROOT", "E:\\AGT_Brain")
+BASE_DIR = os.environ.get("SYNAPZ_ROOT", "E:\\AGT_Brain")
 DB_PATH = os.path.join(BASE_DIR, "memory", "graph_memory.db")
 DECISIONS_DIR = os.path.join(BASE_DIR, "memory", "decisions")
 INCIDENTS_DIR = os.path.join(BASE_DIR, "memory", "incidents")
@@ -168,7 +168,7 @@ async def resolve_conflict_and_save(content: str, agent: str, category: str, imp
         })
 
     system_prompt = (
-        "You are Antigravity Memory Conflict Resolver. Your job is to compare a new memory entry with existing similar memories "
+        "You are SynapzCore Memory Conflict Resolver. Your job is to compare a new memory entry with existing similar memories "
         "and determine if the new entry contradicts, overrides, or obsoletes any old entries (e.g. key updates, changed preferences, updated decisions).\n\n"
         "Analyze the inputs and choose one action:\n"
         "- 'keep': No conflict detected. The new memory is complementary. Keep all old entries and insert the new one.\n"
@@ -312,7 +312,7 @@ async def run_dreaming_compression():
         text_to_compress += f"- ID: {m.get('id')}, Agent: {m.get('agent')}, Category: {m.get('category')}, Content: {m.get('content')}\n"
 
     system_prompt = (
-        "You are Antigravity Dreaming Engine — a system process that runs while the AI agent sleeps to synthesize raw episodic memories into a structured semantic summary.\n\n"
+        "You are SynapzCore Dreaming Engine — a system process that runs while the AI agent sleeps to synthesize raw episodic memories into a structured semantic summary.\n\n"
         "Your goal is to compress the provided raw memories of recent user interactions, system context, preferences, and issues into a concise, high-value bullet-point list.\n"
         "Requirements:\n"
         "- Group information logically (e.g., User Context & Preferences, Architecture Decisions, Solved Incidents).\n"
@@ -558,7 +558,7 @@ async def build_causality_links_with_llm():
     node_list = [{"id": n["id"], "type": n["type"], "summary": n["content"][:200]} for n in nodes]
     
     system_prompt = (
-        "You are Antigravity Causality Engine. Analyze the provided list of AI Agent decisions and incidents and detect logical relationships.\n\n"
+        "You are SynapzCore Causality Engine. Analyze the provided list of AI Agent decisions and incidents and detect logical relationships.\n\n"
         "Detect:\n"
         "1. 'cause_of': A decision/incident that directly triggered an incident.\n"
         "2. 'resolved_by': An incident resolved by a subsequent decision.\n"
@@ -598,7 +598,7 @@ async def build_causality_links_with_llm():
 
 async def main_async():
     import argparse
-    parser = argparse.ArgumentParser(description="🧠 Antigravity Unified Memory Engine CLI")
+    parser = argparse.ArgumentParser(description="🧠 SynapzCore Unified Memory Engine CLI")
     
     parser.add_argument("--save", type=str, help="Save a new memory with conflict resolution check")
     parser.add_argument("--agent", type=str, default="antigravity", help="Agent associated with saved memory")

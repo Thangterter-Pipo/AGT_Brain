@@ -72,7 +72,7 @@
   "api": {
     "endpoint": "http://127.0.0.1:8000/v1/chat/completions",
     "admin": "http://127.0.0.1:8000/admin",
-    "cli": "E:\\AGT_Brain\\crates\\agt-tools\\src\\bin\\ask_grok.rs",
-    "rust_module": "E:\\AGT_Brain\\crates\\agt-tools\\src\\grok.rs"
+    "cli": "E:\\AGT_Brain\\crates\\synapz-tools\\src\\bin\\ask_grok.rs",
+    "rust_module": "E:\\AGT_Brain\\crates\\synapz-tools\\src\\grok.rs"
   }
 }

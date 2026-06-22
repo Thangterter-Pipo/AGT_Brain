@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Paths configuration
-BASE_DIR = os.environ.get("AGT_BRAIN_ROOT", "E:\\AGT_Brain")
+BASE_DIR = os.environ.get("SYNAPZ_ROOT", "E:\\AGT_Brain")
 DB_PATH = os.path.join(BASE_DIR, "memory", "graph_memory.db")
 DECISIONS_DIR = os.path.join(BASE_DIR, "memory", "decisions")
 INCIDENTS_DIR = os.path.join(BASE_DIR, "memory", "incidents")
@@ -291,7 +291,7 @@ async def build_causality_links_with_llm():
         })
         
     system_prompt = (
-        "You are Antigravity Causality Engine. Your task is to analyze the provided list of AI Agent decisions and incidents, "
+        "You are SynapzCore Causality Engine. Your task is to analyze the provided list of AI Agent decisions and incidents, "
         "and detect logical relationships between them.\n\n"
         "Specifically, detect:\n"
         "1. 'cause_of': A decision (or incident) that directly caused or triggered an incident.\n"

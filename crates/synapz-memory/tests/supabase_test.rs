@@ -1,6 +1,6 @@
 //! Integration test — Supabase write/read/search roundtrip.
 
-use agt_memory::SupabaseMemory;
+use synapz_memory::SupabaseMemory;
 
 #[tokio::test]
 async fn supabase_roundtrip() {

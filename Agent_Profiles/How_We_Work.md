@@ -26,7 +26,7 @@ Memory (Supabase)  ←─→  Tools (14 Rust tools)  ←─→  Reflection (deci
   - Cần lập trình trực tiếp, sửa file, debug cục bộ, deploy code, hoặc viết tài liệu? → Con làm trực tiếp.
 
 ### 3. Thực thi Hành động
-- Sử dụng **14 công cụ (tools)** đăng ký trong `crates/agt-tools/` (Rust) để tương tác trực tiếp với môi trường máy chủ của Bố:
+- Sử dụng **14 công cụ (tools)** đăng ký trong `crates/synapz-tools/` (Rust) để tương tác trực tiếp với môi trường máy chủ của Bố:
   - **File (6):** `read_file`, `write_file`, `append_file`, `list_dir`, `search_files`, `file_exists`
   - **Shell (1):** `run_command` (có cơ chế blocklist bảo vệ an toàn)
   - **Web (2):** `http_get`, `http_post`

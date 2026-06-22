@@ -1,5 +1,5 @@
 [package]
-name = "agt-mcp"
+name = "synapz-mcp"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,7 +8,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
-agt-memory = { path = "../agt-memory" }
-agt-tools = { path = "../agt-tools" }
+synapz-memory = { path = "../synapz-memory" }
+synapz-tools = { path = "../synapz-tools" }
 rmcp = { version = "0.1", features = ["server", "transport-io"] }
 chrono = { workspace = true }

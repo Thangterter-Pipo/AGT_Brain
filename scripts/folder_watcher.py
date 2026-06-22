@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-folder_watcher.py — Watcher for Antigravity memory folders.
+folder_watcher.py — Watcher for SynapzCore memory folders.
 Monitors local decisions and incidents. Triggers SQLite Graph Sync and Causality Linker automatically.
 """
 
@@ -11,10 +11,10 @@ import subprocess
 from pathlib import Path
 
 # Paths configuration
-BASE_DIR = os.environ.get("AGT_BRAIN_ROOT", "E:\\AGT_Brain")
+BASE_DIR = os.environ.get("SYNAPZ_ROOT", "E:\\AGT_Brain")
 DECISIONS_DIR = os.path.join(BASE_DIR, "memory", "decisions")
 INCIDENTS_DIR = os.path.join(BASE_DIR, "memory", "incidents")
-ENGINE_SCRIPT = os.path.join(BASE_DIR, "scripts", "agt_brain_memory.py")
+ENGINE_SCRIPT = os.path.join(BASE_DIR, "scripts", "synapz_memory.py")
 
 def get_folder_state():
     """Scans decisions and incidents directories and returns a dictionary of {file_path: mtime}."""
@@ -39,7 +39,7 @@ def get_folder_state():
     return state
 
 def trigger_sync():
-    """Calls agt_brain_memory.py --sync-graph to update the SQLite graph database."""
+    """Calls synapz_memory.py --sync-graph to update the SQLite graph database."""
     print(f"🔄 [{time.strftime('%Y-%m-%d %H:%M:%S')}] 🧠 Changes detected! Triggering SQLite Graph Sync and Causality Linker...")
     try:
         # Run sync-graph command using the same python executable
@@ -62,7 +62,7 @@ def trigger_sync():
         print(f"⚠️ Unexpected error while executing sync: {e}")
 
 def main():
-    print("🚀 Antigravity Local Memory Watcher started...")
+    print("🚀 SynapzCore Local Memory Watcher started...")
     print(f"📂 Watching decisions: {DECISIONS_DIR}")
     print(f"📂 Watching incidents: {INCIDENTS_DIR}")
     print("⏰ Checking for modifications every 3 seconds. Press Ctrl+C to stop.\n")

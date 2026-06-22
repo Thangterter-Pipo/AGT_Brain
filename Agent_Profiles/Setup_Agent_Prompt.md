@@ -1,6 +1,6 @@
-# AI Setup Prompt for AGT_Brain
+# AI Setup Prompt for SynapzCore
 
-Bạn là một AI Coding Agent mới tham gia phát triển dự án **AGT_Brain**. Nhiệm vụ đầu tiên của bạn là **TỰ ĐỘNG THIẾT LẬP VÀ CẤU HÌNH TOÀN BỘ WORKSPACE** để đưa dự án vào trạng thái hoạt động mà không cần sự can thiệp thủ công từ Bố (User), tuân thủ các bước dưới đây.
+Bạn là một AI Coding Agent mới tham gia phát triển dự án **SynapzCore**. Nhiệm vụ đầu tiên của bạn là **TỰ ĐỘNG THIẾT LẬP VÀ CẤU HÌNH TOÀN BỘ WORKSPACE** để đưa dự án vào trạng thái hoạt động mà không cần sự can thiệp thủ công từ Bố (User), tuân thủ các bước dưới đây.
 
 ---
 
@@ -8,9 +8,8 @@ Bạn là một AI Coding Agent mới tham gia phát triển dự án **AGT_Brai
 1. Đọc file `AGENTS.md` ở root để hiểu kiến trúc 2-AI, các MCP tools và các quy tắc hoạt động.
 2. Đọc file `Agent_Profiles/How_We_Work.md` để hiểu quy trình làm việc.
 3. Chạy lệnh kiểm tra cấu trúc thư mục để đảm bảo mọi thư mục cốt lõi đều tồn tại:
-   - `crates/agt-memory`, `crates/agt-tools`, `crates/agt-mcp`
+   - `crates/synapz-memory`, `crates/synapz-tools`, `crates/synapz-mcp`
    - `grok2api_local`
-   - `scripts/grok_cookie_refresh`
 
 ---
 
@@ -36,7 +35,7 @@ Bạn là một AI Coding Agent mới tham gia phát triển dự án **AGT_Brai
 
 ## BƯỚC 4: BUILD RUST WORKSPACE
 1. Trở lại thư mục root `E:\AGT_Brain`.
-2. Chạy lệnh build toàn bộ Rust workspace để sinh ra các binary (`agt-mcp`):
+2. Chạy lệnh build toàn bộ Rust workspace để sinh ra các binary (`synapz-mcp`):
    - `cargo build`
 3. Nếu phát hiện lỗi biên dịch, hãy tự động sửa đổi mã nguồn (tối đa 3 lần) hoặc kiểm tra phiên bản Rust toolchain (dự án dùng Rust 2024).
 
@@ -73,7 +72,7 @@ Chạy thử các tác vụ để đảm bảo thiết lập hoạt động hoà
    - Lệnh: `.\venv\Scripts\granian.exe --interface asgi --host 127.0.0.1 --port 8000 --workers 1 app.main:app`
 2. Kiểm tra API endpoint:
    - `curl http://127.0.0.1:8000/v1/models`
-3. Chạy test thử kết nối Supabase Cloud thông qua crate `agt-memory` hoặc MCP tool `grok_health` để xác nhận kết nối mạng thông suốt.
+3. Chạy test thử kết nối Supabase Cloud thông qua crate `synapz-memory` hoặc MCP tool `grok_health` để xác nhận kết nối mạng thông suốt.
 
 ---
 

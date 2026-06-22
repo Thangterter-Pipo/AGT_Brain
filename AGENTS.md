@@ -1,9 +1,9 @@
-# Antigravity Brain — AGENTS.md
+# SynapzCore — AGENTS.md
 
-Tài liệu này hướng dẫn mọi AI agent khi làm việc trong workspace `AGT_Brain`.
+Tài liệu này hướng dẫn mọi AI agent khi làm việc trong workspace `SynapzCore`.
 
 ## Workspace Identity
-- **Tên hệ thống**: Antigravity Brain
+- **Tên hệ thống**: SynapzCore
 - **Ngôn ngữ chính**: Rust (Edition 2024, workspace resolver 2)
 - **Mục đích**: Bộ não của AI coding assistant — Memory, Tools, MCP Server, Subagent Integrations
 - **Build**: `cargo build` tại root
@@ -28,9 +28,9 @@ Bố (User) → Antigravity (THE BUILDER) → Grok "Gravity" (RESEARCHER)
 ```
 E:\AGT_Brain\
 ├── crates/
-│   ├── agt-memory/     # Supabase cloud memory (reqwest REST + sync queue + archive + pgvector)
-│   ├── agt-tools/      # Agent tools: file(6) + shell(1) + web(2) + memory(5) + grok(2)
-│   └── agt-mcp/        # MCP Server (rmcp, stdio — 10 tools exposed to IDE)
+│   ├── synapz-memory/     # Supabase cloud memory (reqwest REST + sync queue + archive + pgvector)
+│   ├── synapz-tools/      # Agent tools: file(6) + shell(1) + web(2) + memory(5) + grok(2)
+│   └── synapz-mcp/        # MCP Server (rmcp, stdio — 10 tools exposed to IDE)
 ├── memory/             # Local persistent: decisions/ + incidents/ (append-only)
 ├── data/               # supabase_config.json, goals.json
 ├── Agent_Profiles/     # Identity docs (Antigravity.md, How_We_Work.md, Grok.json)
@@ -69,7 +69,7 @@ E:\AGT_Brain\
 
 ## Subagent Access
 
-### Grok — `crates/agt-tools/src/grok.rs`
+### Grok — `crates/synapz-tools/src/grok.rs`
 - **Endpoint**: `http://127.0.0.1:8000` (grok2api)
 - **Models**: grok-3, grok-3-mini, grok-3-thinking, grok-4, grok-4-thinking, grok-4-heavy
 - **Modes**: research, think, review, brainstorm, chat
@@ -77,7 +77,7 @@ E:\AGT_Brain\
 
 ## CDP Autonomous Mode
 
-**Module**: `crates/agt-tools/src/cdp_controller.rs`
+**Module**: `crates/synapz-tools/src/cdp_controller.rs`
 **Requires**: `--remote-debugging-port=9333` at IDE launch
 **Launch script**: `relaunch_antigravity_cdp.bat`
 

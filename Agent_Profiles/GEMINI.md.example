@@ -21,9 +21,9 @@
 ```
 <YOUR_REPOSITORY_ROOT_PATH>/
 ├── crates/
-│   ├── agt-memory/     # Supabase cloud memory (REST + sync queue + archive + pgvector)
-│   ├── agt-tools/      # Agent tools + CDP Controller + Goals + Reflection
-│   └── agt-mcp/        # MCP Server (rmcp, stdio — 10 tools to IDE)
+│   ├── synapz-memory/     # Supabase cloud memory (REST + sync queue + archive + pgvector)
+│   ├── synapz-tools/      # Agent tools + CDP Controller + Goals + Reflection
+│   └── synapz-mcp/        # MCP Server (rmcp, stdio — 10 tools to IDE)
 ├── memory/             # Local persistent: decisions/ + incidents/ (append-only)
 ├── data/               # supabase_config.json, goals.json
 ├── Agent_Profiles/     # Identity docs (Antigravity.md, How_We_Work.md, Grok.json)
@@ -64,7 +64,7 @@ Hệ thống hoạt động với 2 AI phối hợp:
 ## Grok Subagent (Gravity)
 
 **Endpoint**: `http://127.0.0.1:8000` (grok2api local server)
-**Module**: `crates/agt-tools/src/grok.rs`
+**Module**: `crates/synapz-tools/src/grok.rs`
 **CLI**: `ask-grok --mode research "topic"`
 
 ### Model
@@ -101,9 +101,9 @@ Hệ thống hoạt động với 2 AI phối hợp:
 
 ---
 
-## MCP Server (agt-mcp) — 10 Tools
+## MCP Server (synapz-mcp) — 10 Tools
 
-**File**: `crates/agt-mcp/src/main.rs` | **Framework**: rmcp (stdio transport)
+**File**: `crates/synapz-mcp/src/main.rs` | **Framework**: rmcp (stdio transport)
 
 | #   | Tool               | Chức năng                                                             |
 | --- | ------------------ | --------------------------------------------------------------------- |
@@ -122,7 +122,7 @@ Hệ thống hoạt động với 2 AI phối hợp:
 
 ## CDP Autonomous Control (LazyGravity)
 
-- **Module**: `crates/agt-tools/src/cdp_controller.rs`
+- **Module**: `crates/synapz-tools/src/cdp_controller.rs`
 - **Requirement**: Launch IDE với flag `--remote-debugging-port=9333`
 - **Script**: `relaunch_antigravity_cdp.bat`
 - **Capabilities**: Inject messages, giám sát phản hồi, chuyển đổi model, tự động accept code edits.

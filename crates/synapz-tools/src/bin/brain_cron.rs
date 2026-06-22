@@ -1,4 +1,4 @@
-//! brain-cron — Autonomous scheduler for Antigravity Brain.
+//! brain-cron — Autonomous scheduler for SynapzCore.
 //! Runs daily reflection, health checks, and memory maintenance on a timer.
 //!
 //! Usage:
@@ -12,7 +12,7 @@ use chrono::Local;
 use anyhow::Result;
 
 #[derive(Parser, Debug)]
-#[command(name = "brain-cron", about = "🧠 Antigravity Brain — Autonomous Scheduler")]
+#[command(name = "brain-cron", about = "🧠 SynapzCore — Autonomous Scheduler")]
 struct Args {
     /// Run as background daemon
     #[arg(long, default_value_t = false)]
@@ -28,7 +28,7 @@ struct Args {
 }
 
 fn get_config_path() -> String {
-    let base = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+    let base = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
     format!("{base}\\data\\supabase_config.json")
 }
 
@@ -41,7 +41,7 @@ async fn check_health() -> (bool, bool) {
     // Supabase
     let supabase_ok = {
         let config = get_config_path();
-        match agt_memory::SupabaseMemory::from_config(&config) {
+        match synapz_memory::SupabaseMemory::from_config(&config) {
             Ok(mem) => mem.recall("health check", 1).await.is_ok(),
             Err(_) => false,
         }
@@ -62,7 +62,7 @@ async fn run_daily_reflection() -> String {
     let config = get_config_path();
     let today = Local::now().format("%Y-%m-%d").to_string();
 
-    let mem = match agt_memory::SupabaseMemory::from_config(&config) {
+    let mem = match synapz_memory::SupabaseMemory::from_config(&config) {
         Ok(m) => m,
         Err(e) => return format!("❌ Config error: {e}"),
     };
@@ -92,7 +92,7 @@ async fn run_daily_reflection() -> String {
         .collect();
 
     // Decisions today
-    let decisions_dir = std::env::var("AGT_BRAIN_ROOT")
+    let decisions_dir = std::env::var("SYNAPZ_ROOT")
         .unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
     let decisions_path = format!("{decisions_dir}/memory/decisions");
     let today_decisions: Vec<String> = if let Ok(entries) = std::fs::read_dir(&decisions_path) {
@@ -150,8 +150,8 @@ async fn run_daily_reflection() -> String {
 }
 
 async fn run_dream_compression() -> Result<()> {
-    let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
-    let script_path = format!("{base_dir}\\scripts\\agt_brain_memory.py");
+    let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+    let script_path = format!("{base_dir}\\scripts\\synapz_memory.py");
 
     println!("💤 [Dreaming] Calling Python unified memory engine to run dreaming...");
     let output = std::process::Command::new("python")
@@ -184,7 +184,7 @@ async fn main() {
     }
 
     if args.daemon {
-        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
         let watcher_path = format!("{base_dir}\\scripts\\folder_watcher.py");
 
         println!("🚀 Starting folder watcher in background...");
@@ -224,8 +224,8 @@ async fn main() {
         }
 
         println!("🔄 Running one-shot SQLite Graph Sync...");
-        let base_dir = std::env::var("AGT_BRAIN_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
-        let script_path = format!("{base_dir}\\scripts\\agt_brain_memory.py");
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let script_path = format!("{base_dir}\\scripts\\synapz_memory.py");
         let _ = std::process::Command::new("python")
             .arg(&script_path)
             .arg("--sync-graph")
