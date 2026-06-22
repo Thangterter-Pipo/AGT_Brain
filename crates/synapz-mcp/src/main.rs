@@ -1,5 +1,5 @@
 //! agt-mcp — MCP Server exposing Antigravity memory tools to IDE.
-//! 10 tools for 2-AI team (Antigravity + Grok).
+//! 8 tools for 2-AI team (Antigravity + Grok).
 
 use rmcp::ServerHandler;
 use rmcp::ServiceExt;

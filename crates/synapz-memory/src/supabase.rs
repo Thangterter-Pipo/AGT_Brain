@@ -368,10 +368,12 @@ impl SupabaseMemory {
         }))
     }
 
-    /// Generate embedding for text using Grok's OpenAI-compatible endpoint.
+    /// Generate embedding for text using any OpenAI-compatible endpoint.
     /// Returns 384-dim vector (using text-embedding model).
+    /// Set EMBEDDING_API_URL env var to override (default: http://127.0.0.1:8000).
     pub async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        let grok_url = std::env::var("GROK_API_URL")
+        let api_url = std::env::var("EMBEDDING_API_URL")
+            .or_else(|_| std::env::var("GROK_API_URL"))
             .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string());
 
         let payload = serde_json::json!({
@@ -381,7 +383,7 @@ impl SupabaseMemory {
         });
 
         let resp = self.client
-            .post(format!("{grok_url}/v1/embeddings"))
+            .post(format!("{api_url}/v1/embeddings"))
             .header("Authorization", "Bearer grok-key")
             .header("Content-Type", "application/json")
             .json(&payload)
