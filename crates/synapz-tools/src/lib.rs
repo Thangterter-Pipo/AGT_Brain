@@ -1,13 +1,12 @@
 //! # agt-tools — Tool Registry & Built-in Tools for Antigravity
 //!
-//! 14 tools: file (6) + shell (1) + web (2) + memory (5) + grok (2)
+//! 14 tools: file (6) + shell (1) + web (2) + memory (5)
 //! Plus goals manager, reflection logger, and CDP autonomous controller.
 
 pub mod file;
 pub mod shell;
 pub mod web;
 pub mod memory;
-pub mod grok;
 pub mod cdp_controller;
 pub mod goals;
 pub mod reflection;
@@ -75,7 +74,7 @@ impl Registry {
     }
 }
 
-/// Build a registry with all 16 built-in tools pre-registered.
+/// Build a registry with all 14 built-in tools pre-registered.
 pub fn build_default_registry() -> Registry {
     let mut r = Registry::new();
 
@@ -101,10 +100,6 @@ pub fn build_default_registry() -> Registry {
     r.register("recall_team", "Lấy team memories (importance >= 3)", memory::recall_team);
     r.register("search_code", "Tìm code trong codebase", memory::search_code);
 
-    // 🧠 Grok Subagent tools (2) — AI research & thinking via grok2api
-    r.register("ask_grok", "Gọi Grok AI (research/think/review/brainstorm)", grok::ask_grok);
-    r.register("grok_health", "Kiểm tra Grok API health", grok::grok_health);
-
     r
 }
 
@@ -113,8 +108,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_16_tools() {
+    fn registry_has_14_tools() {
         let r = build_default_registry();
-        assert_eq!(r.count(), 16, "Registry should have 16 function-based tools (CDP controller is struct-based, not in registry)");
+        assert_eq!(r.count(), 14, "Registry should have 14 function-based tools");
     }
 }

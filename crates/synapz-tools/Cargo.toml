@@ -3,9 +3,7 @@ name = "synapz-tools"
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-name = "ask-grok"
-path = "src/bin/ask_grok.rs"
+
 
 # ask-team binary deprecated (ChatGPT collaboration removed)
 

@@ -161,52 +161,6 @@ impl AgentMcp {
         }
     }
 
-    /// 🧠 Gọi Grok Subagent — research, suy nghĩ, review code, brainstorm.
-    /// Auto-saves prompt + response to shared team memory.
-    #[tool(description = "Call Grok AI subagent for research, thinking, code review, or brainstorming. Auto-saves to shared memory.")]
-    async fn ask_grok(
-        &self,
-        #[tool(param)] prompt: String,
-        #[tool(param)] mode: Option<String>,
-        #[tool(param)] model: Option<String>,
-    ) -> String {
-        let mode = mode.unwrap_or_else(|| "chat".to_string());
-        let model_name = model.unwrap_or_else(|| "grok-4-heavy".to_string());
-
-        let params = serde_json::json!({
-            "prompt": prompt,
-            "mode": mode,
-            "model": model_name,
-        });
-
-        match synapz_tools::grok::ask_grok(params).await {
-            Ok(result) => {
-                if let Some(response) = result.get("response").and_then(|v| v.as_str()) {
-                    format!("🧠 [Grok/{mode}] {response}")
-                } else {
-                    format!("🧠 Grok response: {result}")
-                }
-            }
-            Err(e) => format!("❌ Grok Subagent error: {e}"),
-        }
-    }
-
-    /// Kiểm tra Grok API health.
-    #[tool(description = "Check if Grok API is healthy and responsive")]
-    async fn grok_health(&self) -> String {
-        match synapz_tools::grok::grok_health(serde_json::json!({})).await {
-            Ok(result) => {
-                let healthy = result.get("healthy").and_then(|v| v.as_bool()).unwrap_or(false);
-                let endpoint = result.get("endpoint").and_then(|v| v.as_str()).unwrap_or("unknown");
-                if healthy {
-                    format!("✅ Grok API healthy at {endpoint}")
-                } else {
-                    format!("❌ Grok API unreachable at {endpoint}")
-                }
-            }
-            Err(e) => format!("❌ Health check error: {e}"),
-        }
-    }
 
     /// 🧠 Auto-Context Loader — CALL THIS AT SESSION START.
     /// Loads critical context so the AI "remembers" immediately:
@@ -469,7 +423,7 @@ impl AgentMcp {
 impl ServerHandler for AgentMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
-            instructions: Some("Antigravity MCP Server — 10 tools: shared memory + Grok Subagent + Auto-Context + Self-Reflection + Skill Library. Call auto_context FIRST!".into()),
+            instructions: Some("SynapzCore MCP Server — 8 tools: shared memory + Auto-Context + Self-Reflection + Skill Library. Call auto_context FIRST!".into()),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
@@ -484,7 +438,7 @@ fn get_config_path() -> String {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    eprintln!("🚀 Antigravity MCP Server starting... (10 tools, auto-context + skills enabled)");
+    eprintln!("🚀 SynapzCore MCP Server starting... (8 tools, auto-context + skills enabled)");
     
     // Spawn folder watcher in the background to automatically sync changes
     let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
