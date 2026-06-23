@@ -325,35 +325,138 @@ class AgentSession:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-# ─── CLI quick-test ───────────────────────────────────────────────────────────
+# ─── CLI — called by MCP Rust subprocess ─────────────────────────────────────
+#
+# Usage (all output JSON to stdout):
+#   python agent_sdk.py --action heartbeat --agent antigravity-ide --role builder [--task "..."] [--status active]
+#   python agent_sdk.py --action claim     --agent antigravity-ide --file scripts/dashboard.html
+#   python agent_sdk.py --action release   --agent antigravity-ide --file scripts/dashboard.html
+#   python agent_sdk.py --action status                              # full coord state summary
+#   python agent_sdk.py --action messages  --agent antigravity-ide  # unread messages
+#   python agent_sdk.py --action tell      --agent antigravity-ide --to claude-code --msg "..."
+#   python agent_sdk.py --action broadcast --agent antigravity-ide --msg "..."
+#   python agent_sdk.py --action demo      --agent test-agent
 
 if __name__ == "__main__":
     import argparse
-    p = argparse.ArgumentParser(description="SynapzCore Agent SDK quick test")
-    p.add_argument("--agent", default="test-agent", help="Agent ID")
-    p.add_argument("--role", default="tester")
+
+    p = argparse.ArgumentParser(description="SynapzCore Agent SDK CLI")
+    p.add_argument("--action", required=True,
+                   choices=["heartbeat", "claim", "release", "status", "messages", "tell", "broadcast", "demo"])
+    p.add_argument("--agent",  default="antigravity-ide")
+    p.add_argument("--role",   default="builder")
+    p.add_argument("--status-val", dest="status_val", default="active")
+    p.add_argument("--task",   default=None, help="current_task description")
+    p.add_argument("--capabilities", default="code,file,shell,cdp")
+    p.add_argument("--file",   default=None, help="file path for claim/release")
+    p.add_argument("--to",     default=None, help="target agent for tell")
+    p.add_argument("--msg",    default="", help="message content")
     p.add_argument("--server", default="http://127.0.0.1:8899")
-    p.add_argument("--action", choices=["register","tasks","messages","demo"], default="demo")
     args = p.parse_args()
 
-    with AgentSession(args.agent, role=args.role, server=args.server) as agent:
-        if args.action in ("tasks", "demo"):
+    caps = [c.strip() for c in args.capabilities.split(",") if c.strip()]
+
+    if args.action == "heartbeat":
+        # One-shot heartbeat — no daemon, just register + exit
+        session = AgentSession(args.agent, role=args.role,
+                               capabilities=caps,
+                               server=args.server,
+                               heartbeat_interval=9999,
+                               auto_start=False)
+        session._current_task = args.task
+        session._status = args.status_val
+        result = session._post("/api/coord/heartbeat", {
+            "agent_id": args.agent,
+            "role": args.role,
+            "status": args.status_val,
+            "capabilities": caps,
+            "current_task": args.task,
+        })
+        print(json.dumps(result or {"ok": False, "error": "server unreachable"}))
+
+    elif args.action == "claim":
+        if not args.file:
+            print(json.dumps({"ok": False, "error": "file required"}))
+            sys.exit(1)
+        session = AgentSession.__new__(AgentSession)
+        session.agent_id = args.agent
+        session.server = args.server
+        result = session._post("/api/coord/claim", {
+            "agent_id": args.agent,
+            "file_path": args.file,
+        })
+        print(json.dumps(result or {"ok": False, "error": "server unreachable"}))
+
+    elif args.action == "release":
+        if not args.file:
+            print(json.dumps({"ok": False, "error": "file required"}))
+            sys.exit(1)
+        session = AgentSession.__new__(AgentSession)
+        session.agent_id = args.agent
+        session.server = args.server
+        result = session._post("/api/coord/release", {
+            "agent_id": args.agent,
+            "file_path": args.file,
+        })
+        print(json.dumps(result or {"ok": False, "error": "server unreachable"}))
+
+    elif args.action == "status":
+        session = AgentSession.__new__(AgentSession)
+        session.server = args.server
+        state = session._get("/api/coord/state") or {}
+        agents = state.get("agents", {})
+        locks  = state.get("file_locks", {})
+        tasks  = [t for t in state.get("task_queue", []) if t.get("status") not in ("done","cancelled")]
+        msgs   = state.get("messages", [])
+        print(json.dumps({
+            "agents": len(agents),
+            "active": [a for a, v in agents.items() if not v.get("stale")],
+            "stale":  [a for a, v in agents.items() if v.get("stale")],
+            "locks":  locks,
+            "open_tasks": len(tasks),
+            "messages": len(msgs),
+        }, ensure_ascii=False))
+
+    elif args.action == "messages":
+        session = AgentSession.__new__(AgentSession)
+        session.server = args.server
+        msgs = session._get(f"/api/coord/messages?agent_id={urllib.parse.quote(args.agent)}&unread=true") or []
+        print(json.dumps(msgs, ensure_ascii=False))
+
+    elif args.action == "tell":
+        if not args.to or not args.msg:
+            print(json.dumps({"ok": False, "error": "to and msg required"}))
+            sys.exit(1)
+        session = AgentSession.__new__(AgentSession)
+        session.server = args.server
+        result = session._post("/api/coord/message", {
+            "from_agent": args.agent,
+            "to_agent": args.to,
+            "content": args.msg,
+            "type": "info",
+        })
+        print(json.dumps(result or {"ok": False}))
+
+    elif args.action == "broadcast":
+        session = AgentSession.__new__(AgentSession)
+        session.server = args.server
+        result = session._post("/api/coord/message", {
+            "from_agent": args.agent,
+            "to_agent": None,
+            "content": args.msg,
+            "type": "info",
+        })
+        print(json.dumps(result or {"ok": False}))
+
+    elif args.action == "demo":
+        with AgentSession(args.agent, role=args.role, capabilities=caps,
+                          server=args.server) as agent:
             task = agent.claim_next_task()
             if task:
-                print(f"📋 Claimed task: {task['title']}")
-                time.sleep(1)
-                agent.done(task["id"], "Test completed")
-                print("✅ Task done")
-            else:
-                print("📭 No tasks available")
-
-        if args.action in ("messages", "demo"):
+                print(json.dumps({"claimed": task.get("title")}))
+                time.sleep(0.5)
+                agent.done(task["id"], "Demo completed")
             msgs = agent.get_messages()
-            print(f"📬 {len(msgs)} unread messages")
-            for m in msgs:
-                print(f"  [{m['from']}] {m['content'][:80]}")
-
-        if args.action == "demo":
-            agent.broadcast(f"{args.agent} demo completed, going idle.")
+            agent.broadcast(f"{args.agent} demo done, going idle.")
             agent.set_status("idle")
-            print(f"🏁 Demo done. Agent '{args.agent}' will deregister now.")
+            print(json.dumps({"status": "demo_done", "messages": len(msgs)}))

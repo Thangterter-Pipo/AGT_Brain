@@ -448,6 +448,138 @@ impl AgentMcp {
         }
     }
 
+    /// 🤝 Coordination: Heartbeat — Register or refresh agent presence.
+    /// Call this at session start and periodically to stay visible to other agents.
+    #[tool(description = "Register or refresh this agent in the multi-agent coordination system. Call at session start and every ~60s. Params: agent_id (e.g. 'antigravity-ide'), role ('builder'/'researcher'), current_task (what you are working on now), status ('active'/'idle'/'busy').")]
+    async fn coord_heartbeat(
+        &self,
+        #[tool(param)] agent_id: String,
+        #[tool(param)] role: Option<String>,
+        #[tool(param)] current_task: Option<String>,
+        #[tool(param)] status: Option<String>,
+    ) -> String {
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let sdk = format!("{base_dir}\\scripts\\agent_sdk.py");
+        let role_val = role.unwrap_or_else(|| "builder".to_string());
+        let status_val = status.unwrap_or_else(|| "active".to_string());
+
+        let mut cmd = Command::new("python");
+        cmd.arg(&sdk)
+           .arg("--action").arg("heartbeat")
+           .arg("--agent").arg(&agent_id)
+           .arg("--role").arg(&role_val)
+           .arg("--status-val").arg(&status_val);
+        if let Some(ref task) = current_task {
+            cmd.arg("--task").arg(task);
+        }
+        match cmd.output() {
+            Ok(out) if out.status.success() => {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                format!("🤝 Heartbeat sent [{agent_id}/{role_val}]: {s}")
+            }
+            Ok(out) => format!("⚠️ Heartbeat error: {}", String::from_utf8_lossy(&out.stderr)),
+            Err(e) => format!("❌ SDK error: {e}"),
+        }
+    }
+
+    /// 🔒 Coordination: Claim File — Reserve exclusive edit rights on a file.
+    /// MUST call before editing any file. Prevents conflicts with other agents.
+    /// Returns ok=true if claimed, ok=false with holder name if another agent holds it.
+    #[tool(description = "Claim exclusive edit rights on a file before modifying it. Prevents conflicts when multiple agents work simultaneously. Call coord_release when done editing. Params: agent_id, file_path (relative to repo root, e.g. 'scripts/dashboard.html').")]
+    async fn coord_claim(
+        &self,
+        #[tool(param)] agent_id: String,
+        #[tool(param)] file_path: String,
+    ) -> String {
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let sdk = format!("{base_dir}\\scripts\\agent_sdk.py");
+        match Command::new("python")
+            .arg(&sdk)
+            .arg("--action").arg("claim")
+            .arg("--agent").arg(&agent_id)
+            .arg("--file").arg(&file_path)
+            .output()
+        {
+            Ok(out) if out.status.success() => {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                // Parse JSON result for readable output
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&s) {
+                    if val.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        format!("🔒 [{agent_id}] claimed `{file_path}` — safe to edit")
+                    } else {
+                        let holder = val.get("holder").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        format!("⚠️ `{file_path}` is held by [{holder}] — wait or coordinate before editing")
+                    }
+                } else { s }
+            }
+            Ok(out) => format!("⚠️ Claim error: {}", String::from_utf8_lossy(&out.stderr)),
+            Err(e) => format!("❌ SDK error: {e}"),
+        }
+    }
+
+    /// 🔓 Coordination: Release File — Release edit lock on a file when done.
+    /// MUST call after finishing edits so other agents can proceed.
+    #[tool(description = "Release the edit lock on a file after you finish modifying it. Always call this after coord_claim when edits are complete. Params: agent_id, file_path.")]
+    async fn coord_release(
+        &self,
+        #[tool(param)] agent_id: String,
+        #[tool(param)] file_path: String,
+    ) -> String {
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let sdk = format!("{base_dir}\\scripts\\agent_sdk.py");
+        match Command::new("python")
+            .arg(&sdk)
+            .arg("--action").arg("release")
+            .arg("--agent").arg(&agent_id)
+            .arg("--file").arg(&file_path)
+            .output()
+        {
+            Ok(out) if out.status.success() => {
+                format!("🔓 [{agent_id}] released `{file_path}`")
+            }
+            Ok(out) => format!("⚠️ Release error: {}", String::from_utf8_lossy(&out.stderr)),
+            Err(e) => format!("❌ SDK error: {e}"),
+        }
+    }
+
+    /// 📊 Coordination: Status — See who is working on what right now.
+    /// Use before editing to check if another agent holds the file.
+    #[tool(description = "Get current multi-agent coordination state: which agents are active, what files are locked, open tasks, and pending messages. Use before editing files to avoid conflicts.")]
+    async fn coord_status(&self) -> String {
+        let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
+        let sdk = format!("{base_dir}\\scripts\\agent_sdk.py");
+        match Command::new("python")
+            .arg(&sdk)
+            .arg("--action").arg("status")
+            .output()
+        {
+            Ok(out) if out.status.success() => {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&s) {
+                    let agents = val.get("agents").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let active = val.get("active").and_then(|v| v.as_array())
+                        .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
+                        .unwrap_or_default();
+                    let stale = val.get("stale").and_then(|v| v.as_array())
+                        .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
+                        .unwrap_or_default();
+                    let locks = val.get("locks").and_then(|v| v.as_object())
+                        .map(|m| m.iter()
+                            .map(|(f, l)| format!("  🔒 `{f}` → {}", l.get("holder").and_then(|h| h.as_str()).unwrap_or("?")))
+                            .collect::<Vec<_>>().join("\n"))
+                        .unwrap_or_else(|| "  (none)".to_string());
+                    let tasks = val.get("open_tasks").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let msgs = val.get("messages").and_then(|v| v.as_u64()).unwrap_or(0);
+                    format!(
+                        "📊 Coordination Status:\n🤖 Agents: {agents} total | Active: [{active}] | Stale: [{stale}]\n🔒 File Locks:\n{locks}\n📋 Open tasks: {tasks} | 💬 Messages: {msgs}"
+                    )
+                } else { s }
+            }
+            Ok(out) => format!("⚠️ Status error: {}", String::from_utf8_lossy(&out.stderr)),
+            Err(e) => format!("❌ SDK error: {e}"),
+        }
+    }
+
     /// 🔍 Recall Skills — Search saved skills by keyword or tags.
     /// Returns matching skills with their problem/solution pairs.
     #[tool(description = "Search saved skills/patterns by keyword. Returns matching skills with problem/solution pairs.")]
@@ -480,7 +612,7 @@ impl AgentMcp {
 impl ServerHandler for AgentMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
-            instructions: Some("SynapzCore MCP Server — 8 tools: shared memory + Auto-Context + Self-Reflection + Skill Library. Call auto_context FIRST!".into()),
+            instructions: Some("SynapzCore MCP Server — 12 tools: shared memory + Auto-Context + Self-Reflection + Skill Library + Multi-Agent Coordination. WORKFLOW: (1) Call auto_context FIRST. (2) Call coord_heartbeat to register presence. (3) Before editing any file, call coord_claim. (4) After editing, call coord_release. Use coord_status to check who holds what.".into()),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
@@ -495,7 +627,7 @@ fn get_config_path() -> String {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    eprintln!("🚀 SynapzCore MCP Server starting... (8 tools, auto-context + skills enabled)");
+    eprintln!("🚀 SynapzCore MCP Server starting... (12 tools: memory + auto-context + skills + coordination)");
     
     // Spawn folder watcher in the background to automatically sync changes
     let base_dir = std::env::var("SYNAPZ_ROOT").unwrap_or_else(|_| "E:\\AGT_Brain".to_string());
