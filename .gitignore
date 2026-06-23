@@ -20,6 +20,10 @@ Cargo.lock
 /memory/
 grok2api_local/
 grok2api_data/
+.env
+.env.local
+*.env
+!.env.example
 
 # OS junk
 Thumbs.db
@@ -51,3 +55,7 @@ mingw/
 
 
 *.bak
+
+# Scripts upload cache
+scripts/.upload_cache/
+

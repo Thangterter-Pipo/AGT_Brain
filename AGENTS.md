@@ -39,20 +39,24 @@ E:\AGT_Brain\
 └── .gitignore
 ```
 
-## MCP Tools (10)
+## MCP Tools (12)
 
 | # | Tool | Description |
 |---|------|-------------|
 | 1 | `auto_context` | 🧠 **CALL FIRST** — Auto-load decisions, memories, goals, incidents at session start |
-| 2 | `search_memory` | Search memories by keyword, optionally filter by agent |
-| 3 | `add_memory` | Save important information to shared memory |
+| 2 | `search_memory` | Search memories (Spreading Activation + Supabase vector fallback) |
+| 3 | `add_memory` | Save important information to shared memory (conflict resolution) |
 | 4 | `team_memory` | Get recent high-importance memories from team |
 | 5 | `get_boss_profile` | Retrieve boss profile and preferences |
-| 6 | `ask_grok` | Call Grok subagent (research/think/review/brainstorm) |
-| 7 | `grok_health` | Check Grok API health |
-| 8 | `daily_reflection` | 🪞 Self-review: stats, top memories, decisions, auto-save insights |
-| 9 | `save_skill` | 📚 Save reusable pattern/solution as high-importance skill |
-| 10 | `recall_skills` | 🔍 Search saved skills by keyword |
+| 6 | `daily_reflection` | 🪞 Self-review: stats, top memories, decisions, auto-save insights |
+| 7 | `save_skill` | 📚 Save reusable pattern/solution as high-importance skill |
+| 8 | `recall_skills` | 🔍 Search saved skills by keyword |
+| 9 | `coord_heartbeat` | 🤝 Register/refresh agent presence in coordination system |
+| 10 | `coord_claim` | 🔒 Claim exclusive edit rights on a file before editing |
+| 11 | `coord_release` | 🔓 Release the edit lock on a file when done |
+| 12 | `coord_status` | 📊 See which agents are active and what files are locked |
+
+> Note: Grok tools (`ask_grok`, `grok_health`) live in the separate **HeimdallProxy** repo, not here.
 
 ## Shared Memory System
 

@@ -44,16 +44,28 @@ struct InsertPayloadFull {
 }
 
 impl SupabaseMemory {
-    /// Load config from JSON file.
+    /// Load config — env vars take priority, JSON file is fallback.
+    ///
+    /// Priority order:
+    /// 1. `SUPABASE_URL` + `SUPABASE_KEY` environment variables (preferred — keeps secrets out of files)
+    /// 2. JSON config file at `config_path` (backward compatible)
     pub fn from_config(config_path: &str) -> Result<Self> {
+        // 1. Env-first: if both env vars are set, use them and skip the file entirely.
+        if let (Ok(url), Ok(key)) = (std::env::var("SUPABASE_URL"), std::env::var("SUPABASE_KEY")) {
+            if !url.is_empty() && !key.is_empty() {
+                return Ok(Self { client: Client::new(), url, key });
+            }
+        }
+
+        // 2. Fallback: read from JSON file, allowing env vars to override individual fields.
         let content = fs::read_to_string(config_path)
-            .map_err(|e| anyhow!("❌ Config not found at {config_path}: {e}"))?;
+            .map_err(|e| anyhow!("❌ No SUPABASE_URL/SUPABASE_KEY env vars and config not found at {config_path}: {e}"))?;
         let config: SupabaseConfig = serde_json::from_str(&content)?;
 
         Ok(Self {
             client: Client::new(),
-            url: config.supabase_url,
-            key: config.supabase_key,
+            url: std::env::var("SUPABASE_URL").ok().filter(|s| !s.is_empty()).unwrap_or(config.supabase_url),
+            key: std::env::var("SUPABASE_KEY").ok().filter(|s| !s.is_empty()).unwrap_or(config.supabase_key),
         })
     }
 

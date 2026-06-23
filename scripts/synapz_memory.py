@@ -33,11 +33,30 @@ DEFAULT_MODEL = "ag/gemini-3-flash"
 # =====================================================================
 
 def get_config():
+    """Load Supabase config — env vars take priority, JSON file is fallback.
+
+    Priority:
+    1. SUPABASE_URL + SUPABASE_KEY environment variables (preferred — secrets out of files)
+    2. JSON config file at data/supabase_config.json (backward compatible)
+    """
+    env_url = os.environ.get("SUPABASE_URL")
+    env_key = os.environ.get("SUPABASE_KEY")
+    if env_url and env_key:
+        return {"supabase_url": env_url, "supabase_key": env_key}
+
     config_path = os.path.join(BASE_DIR, "data", "supabase_config.json")
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Supabase config not found at {config_path}")
+        raise FileNotFoundError(
+            f"No SUPABASE_URL/SUPABASE_KEY env vars and Supabase config not found at {config_path}"
+        )
     with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        config = json.load(f)
+    # Allow env vars to override individual fields from file.
+    if env_url:
+        config["supabase_url"] = env_url
+    if env_key:
+        config["supabase_key"] = env_key
+    return config
 
 def get_supabase_headers(config):
     return {

@@ -10,7 +10,7 @@
 - 🧠 **Shared Memory**: Supabase cloud — các agents chia sẻ chung bộ nhớ dài hạn (tự động lưu, đo mức độ quan trọng).
 - 🔍 **Semantic Search**: pgvector embeddings + `match_memories()` RPC tìm kiếm ký ức theo ngữ nghĩa.
 - 🔧 **14 Registry Tools** + CDP Controller: File(6) + Shell(1) + Web(2) + Memory(5).
-- 🔌 **MCP Server**: 8 tools exposed qua rmcp stdio — tích hợp trực tiếp vào VS Code / Cursor / IDE.
+- 🔌 **MCP Server**: 12 tools exposed qua rmcp stdio — tích hợp trực tiếp vào VS Code / Cursor / IDE.
 - 🧠 **Grok Subagent**: Research, Think, Review, Brainstorm — powered by Gravity Framework (mặc định dùng `grok-4-heavy`).
 - 🪞 **Daily Self-Reflection**: Tự review memories, decisions, tự phản tỉnh và tạo ra các insights cải thiện hệ thống hằng ngày.
 - 📚 **Skill Library**: Save/recall các patterns, giải pháp tái sử dụng dưới dạng skill có độ quan trọng cao.
@@ -28,7 +28,7 @@ SynapzCore/
 ├── crates/
 │   ├── synapz-memory/     # Supabase REST + sync queue + archive + pgvector
 │   ├── synapz-tools/      # 14 tools + CDP Controller + Goals + Reflection
-│   └── synapz-mcp/        # MCP Server (rmcp, stdio — 8 tools to IDE)
+│   └── synapz-mcp/        # MCP Server (rmcp, stdio — 12 tools to IDE)
 ├── memory/             # decisions/ & incidents/ (append-only local logs)
 ├── data/               # goals.json (Supabase config được ignore bảo mật)
 ├── Agent_Profiles/     # Agent identity, workflow docs, Grok/Gravity config
@@ -46,7 +46,7 @@ graph TD
     
     subgraph RustWorkspace["📦 SynapzCore (E:\\AGT_Brain)"]
         Builder["🤖 Antigravity (THE BUILDER)<br>Main Agent / Orchestrator"]
-        synapz_mcp["🔌 synapz-mcp<br>MCP Server (rmcp / stdio — 8 tools)"]
+        synapz_mcp["🔌 synapz-mcp<br>MCP Server (rmcp / stdio — 12 tools)"]
         synapz_tools["🔧 synapz-tools<br>14 core tools / CDP Controller"]
         synapz_memory["🧠 synapz-memory<br>Supabase client / Sync queue"]
     end

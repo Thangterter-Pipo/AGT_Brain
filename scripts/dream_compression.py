@@ -15,13 +15,21 @@ def get_config_path():
     return os.path.join(base_dir, "data", "supabase_config.json")
 
 def main():
-    config_path = get_config_path()
-    if not os.path.exists(config_path):
-        print(f"❌ Supabase config not found at {config_path}")
-        sys.exit(1)
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    env_url = os.environ.get("SUPABASE_URL")
+    env_key = os.environ.get("SUPABASE_KEY")
+    if env_url and env_key:
+        config = {"supabase_url": env_url, "supabase_key": env_key}
+    else:
+        config_path = get_config_path()
+        if not os.path.exists(config_path):
+            print(f"❌ No SUPABASE_URL/SUPABASE_KEY env vars and Supabase config not found at {config_path}")
+            sys.exit(1)
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        if env_url:
+            config["supabase_url"] = env_url
+        if env_key:
+            config["supabase_key"] = env_key
 
     supabase_url = config.get("supabase_url")
     supabase_key = config.get("supabase_key")

@@ -258,12 +258,16 @@ def populate_from_local_files():
     print(f"✅ Loaded {decisions_count} decisions and {incidents_count} incidents into graph nodes.")
 
 def get_9router_summary_client():
+    env_url = os.environ.get("SUPABASE_URL")
+    env_key = os.environ.get("SUPABASE_KEY")
+    if env_url and env_key:
+        return env_url, env_key
     config_path = os.path.join(BASE_DIR, "data", "supabase_config.json")
     if not os.path.exists(config_path):
         return None, None
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
-    return config.get("supabase_url"), config.get("supabase_key")
+    return (env_url or config.get("supabase_url")), (env_key or config.get("supabase_key"))
 
 async def build_causality_links_with_llm():
     """
