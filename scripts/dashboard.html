@@ -656,6 +656,7 @@
                 <div class="nav-section-label">IDE</div>
                 <div class="nav-item" data-view="chat"><span class="nav-icon">💬</span> Antigravity Chat <span class="nav-badge" id="nav-cdp-status">⏺</span></div>
                 <div class="nav-item" data-view="agents"><span class="nav-icon">🤝</span> Agents <span class="nav-badge" id="nav-agent-count">0</span></div>
+                <div class="nav-item" data-view="project-log"><span class="nav-icon">📋</span> Lịch sử dự án <span class="nav-badge" id="nav-log-count">—</span></div>
             </div>
 
             <div class="nav-footer">
@@ -910,6 +911,53 @@
                 </div>
 
                 <!-- ===== VIEW: HEALTH ===== -->
+                <div class="view" id="view-project-log">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h3>📋 Lịch sử dự án</h3>
+                            <div style="display:flex;gap:.5rem;align-items:center;">
+                                <select id="log-filter-cat" onchange="loadProjectLog()" style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);padding:.25rem .5rem;border-radius:6px;font-size:.8rem;">
+                                    <option value="">Tất cả</option>
+                                    <option value="task">task</option>
+                                    <option value="file">file</option>
+                                    <option value="message">message</option>
+                                    <option value="milestone">milestone</option>
+                                    <option value="deploy">deploy</option>
+                                    <option value="general">general</option>
+                                </select>
+                                <button class="btn btn-sm" onclick="loadProjectLog()">🔄 Refresh</button>
+                                <button class="btn btn-sm btn-accent" onclick="showAddLogModal()">＋ Ghi việc</button>
+                            </div>
+                        </div>
+                        <div id="project-log-list" style="margin-top:.75rem;"></div>
+                    </div>
+
+                    <!-- Modal thêm log -->
+                    <div id="add-log-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;">
+                        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;width:480px;max-width:95vw;">
+                            <h3 style="margin-bottom:1rem;">📋 Ghi việc vào lịch sử</h3>
+                            <label style="font-size:.85rem;color:var(--text-muted);">Agent ID</label>
+                            <input id="log-agent" class="input" value="bố" style="width:100%;margin-bottom:.75rem;" />
+                            <label style="font-size:.85rem;color:var(--text-muted);">Hành động</label>
+                            <input id="log-action" class="input" placeholder="vd: Giao task viết test" style="width:100%;margin-bottom:.75rem;" />
+                            <label style="font-size:.85rem;color:var(--text-muted);">Chi tiết</label>
+                            <textarea id="log-detail" class="input" rows="3" style="width:100%;margin-bottom:.75rem;resize:vertical;"></textarea>
+                            <label style="font-size:.85rem;color:var(--text-muted);">Category</label>
+                            <select id="log-cat" class="input" style="width:100%;margin-bottom:1rem;">
+                                <option value="general">general</option>
+                                <option value="task">task</option>
+                                <option value="milestone">milestone</option>
+                                <option value="file">file</option>
+                                <option value="deploy">deploy</option>
+                            </select>
+                            <div style="display:flex;gap:.5rem;justify-content:flex-end;">
+                                <button class="btn" onclick="document.getElementById('add-log-modal').style.display='none'">Hủy</button>
+                                <button class="btn btn-accent" onclick="submitLog()">Ghi lại</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="view" id="view-health">
                     <div class="health-grid">
                         <div class="health-card">
@@ -1003,6 +1051,7 @@
         chat: { title: 'Antigravity Chat', sub: 'Điều khiển IDE trực tiếp qua CDP' },
         agents: { title: 'Agent Coordination', sub: 'Quản lý & phối hợp đa AI' },
         health: { title: 'System Health', sub: 'Trạng thái kết nối & dịch vụ' },
+        'project-log': { title: 'Lịch sử dự án', sub: 'Toàn bộ việc bố giao & agent thực hiện' },
     };
 
     // ============ NAVIGATION ============
@@ -1034,6 +1083,8 @@
         } else if (view === 'health') {
             loadHealth();
             _healthTimer = setInterval(loadHealth, 5000);
+        } else if (view === 'project-log') {
+            loadProjectLog();
         }
     }
 
@@ -1854,6 +1905,71 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title, description: desc, assigned_to: assignee, posted_by: currentChatFrom() || 'dashboard', priority: 5 })
         }).then(() => { showToast(`📋 Task created`); loadAgentPanel(); });
+    }
+
+    // ============ PROJECT LOG ============
+    async function loadProjectLog() {
+        const cat = document.getElementById('log-filter-cat')?.value || '';
+        const url = '/api/coord/log?limit=200' + (cat ? `&category=${cat}` : '');
+        try {
+            const r = await fetch(url);
+            const entries = await r.json();
+            document.getElementById('nav-log-count').textContent = entries.length;
+            renderProjectLog(entries);
+        } catch(e) {
+            document.getElementById('project-log-list').innerHTML = `<div class="empty">Lỗi tải lịch sử: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
+    const CAT_COLOR = { task:'#38bdf8', file:'#a78bfa', message:'#34d399', milestone:'#fbbf24', deploy:'#f87171', general:'#94a3b8' };
+
+    function renderProjectLog(entries) {
+        const el = document.getElementById('project-log-list');
+        if (!entries.length) { el.innerHTML = '<div class="empty"><span class="emoji">📭</span>Chưa có lịch sử nào.</div>'; return; }
+        el.innerHTML = entries.map(e => {
+            const color = CAT_COLOR[e.category] || '#94a3b8';
+            const tags = (e.tags||[]).map(t=>`<span style="background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:0 6px;font-size:.75rem;">${escapeHtml(t)}</span>`).join(' ');
+            return `<div style="display:flex;gap:.75rem;padding:.75rem 0;border-bottom:1px solid var(--border);">
+                <div style="flex-shrink:0;width:8px;border-radius:4px;background:${color};margin:2px 0;"></div>
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+                        <span style="font-weight:600;">${escapeHtml(e.action)}</span>
+                        <span style="font-size:.75rem;color:${color};background:${color}22;padding:1px 7px;border-radius:10px;">${escapeHtml(e.category)}</span>
+                        <span style="font-size:.75rem;color:var(--text-muted);">by ${escapeHtml(e.agent_id)}</span>
+                        ${tags}
+                    </div>
+                    ${e.detail ? `<div style="margin-top:.3rem;color:var(--text-secondary);font-size:.85rem;white-space:pre-wrap;">${escapeHtml(e.detail)}</div>` : ''}
+                    <div style="margin-top:.25rem;font-size:.75rem;color:var(--text-muted);">${formatTime(e.created_at)}</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function showAddLogModal() {
+        const m = document.getElementById('add-log-modal');
+        m.style.display = 'flex';
+        document.getElementById('log-action').focus();
+    }
+
+    async function submitLog() {
+        const body = {
+            agent_id: document.getElementById('log-agent').value.trim() || 'bố',
+            action: document.getElementById('log-action').value.trim(),
+            detail: document.getElementById('log-detail').value.trim(),
+            category: document.getElementById('log-cat').value,
+        };
+        if (!body.action) { showToast('⚠️ Cần nhập hành động'); return; }
+        try {
+            const r = await fetch('/api/coord/log', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            const res = await r.json();
+            if (res.ok) {
+                document.getElementById('add-log-modal').style.display = 'none';
+                document.getElementById('log-action').value = '';
+                document.getElementById('log-detail').value = '';
+                showToast('✅ Đã ghi vào lịch sử');
+                loadProjectLog();
+            }
+        } catch(e) { showToast('Lỗi: ' + e); }
     }
 
     // ============ HELPERS ============

@@ -57,6 +57,7 @@ class Coordinator:
             "file_locks": {},
             "task_queue": [],
             "messages": [],
+            "project_log": [],
         }
 
     def _read_state(self) -> dict:
@@ -279,6 +280,44 @@ class Coordinator:
             if count:
                 self._write_state(state)
         return count
+
+    # ─── Project Log ──────────────────────────────────────────────
+
+    MAX_LOG = 500
+
+    def add_log(self, agent_id: str, action: str, detail: str = "",
+                category: str = "general", tags: list = None) -> dict:
+        """
+        Append an entry to the project history log.
+        category: task|file|message|deploy|milestone|general
+        """
+        entry = {
+            "id": f"log-{int(time.time()*1000)}",
+            "agent_id": agent_id,
+            "action": action,
+            "detail": detail,
+            "category": category,
+            "tags": tags or [],
+            "created_at": self._now_iso(),
+        }
+        with _lock:
+            state = self._read_state()
+            log = state.setdefault("project_log", [])
+            log.append(entry)
+            if len(log) > self.MAX_LOG:
+                state["project_log"] = log[-self.MAX_LOG:]
+            self._write_state(state)
+        return entry
+
+    def get_log(self, limit: int = 100, category: str = None,
+                agent_id: str = None) -> list:
+        """Get project log entries, newest first."""
+        entries = self._read_state().get("project_log", [])
+        if category:
+            entries = [e for e in entries if e.get("category") == category]
+        if agent_id:
+            entries = [e for e in entries if e.get("agent_id") == agent_id]
+        return list(reversed(entries[-limit:]))
 
     # ─── Full State ───────────────────────────────────────────────
 

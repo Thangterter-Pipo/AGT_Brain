@@ -677,6 +677,16 @@ class CustomHandler(SimpleHTTPRequestHandler):
             self._json_ok(msgs)
             return
 
+        elif parsed_path.path == "/api/coord/log":
+            qs = urllib.parse.parse_qs(parsed_path.query)
+            entries = COORD.get_log(
+                limit=int(qs.get("limit", ["100"])[0]),
+                category=qs.get("category", [None])[0],
+                agent_id=qs.get("agent_id", [None])[0],
+            )
+            self._json_ok(entries)
+            return
+
         # Fallback to serving static files
         super().do_GET()
 
@@ -926,6 +936,21 @@ class CustomHandler(SimpleHTTPRequestHandler):
                 body = self._read_body()
                 count = COORD.mark_read(body.get("agent_id", ""), body.get("message_ids", []))
                 self._json_ok({"ok": True, "marked": count})
+            except Exception as e:
+                self._json_err(500, str(e))
+            return
+
+        elif parsed_path.path == "/api/coord/log":
+            try:
+                body = self._read_body()
+                entry = COORD.add_log(
+                    agent_id=body.get("agent_id", "unknown"),
+                    action=body.get("action", ""),
+                    detail=body.get("detail", ""),
+                    category=body.get("category", "general"),
+                    tags=body.get("tags", []),
+                )
+                self._json_ok({"ok": True, "entry": entry})
             except Exception as e:
                 self._json_err(500, str(e))
             return
