@@ -342,7 +342,7 @@ if __name__ == "__main__":
 
     p = argparse.ArgumentParser(description="SynapzCore Agent SDK CLI")
     p.add_argument("--action", required=True,
-                   choices=["heartbeat", "claim", "release", "status", "messages", "tell", "broadcast", "demo"])
+                   choices=["heartbeat", "claim", "release", "status", "messages", "tell", "broadcast", "watch", "demo"])
     p.add_argument("--agent",  default="antigravity-ide")
     p.add_argument("--role",   default="builder")
     p.add_argument("--status-val", dest="status_val", default="active")
@@ -352,6 +352,8 @@ if __name__ == "__main__":
     p.add_argument("--to",     default=None, help="target agent for tell")
     p.add_argument("--msg",    default="", help="message content")
     p.add_argument("--server", default="http://127.0.0.1:8899")
+    p.add_argument("--once", action="store_true", help="watch: print current unread + open tasks then exit")
+    p.add_argument("--interval", type=int, default=10, help="watch: poll seconds")
     args = p.parse_args()
 
     caps = [c.strip() for c in args.capabilities.split(",") if c.strip()]
@@ -447,6 +449,65 @@ if __name__ == "__main__":
             "type": "info",
         })
         print(json.dumps(result or {"ok": False}))
+
+    elif args.action == "watch":
+        # Webhook-style listener: an AI registers, then watches the feed.
+        # On new directed message / broadcast / open task → emits a JSON event
+        # to stdout (one line each) so a host loop can react & "xin việc".
+        # --once: emit current unread + open tasks then exit (for poll-based hosts).
+        session = AgentSession(args.agent, role=args.role, capabilities=caps,
+                               server=args.server,
+                               heartbeat_interval=max(30, args.interval * 3))
+        try:
+            session.broadcast(f"👀 {args.agent} ({args.role}) online & watching. Sẵn sàng nhận việc.")
+        except Exception:
+            pass
+
+        seen_msgs = set()
+        seen_tasks = set()
+
+        def poll_once():
+            events = []
+            # 1) Unread messages addressed to me or broadcast
+            for m in session.get_messages(unread_only=True):
+                mid = m.get("id")
+                if mid and mid not in seen_msgs and m.get("from") != args.agent:
+                    seen_msgs.add(mid)
+                    events.append({"kind": "message", "id": mid,
+                                   "from": m.get("from"), "to": m.get("to"),
+                                   "content": m.get("content")})
+                    if mid:
+                        try: session.mark_read([mid])
+                        except Exception: pass
+            # 2) Open tasks I could claim (pending, unassigned or assigned to me)
+            state = session._get("/api/coord/state") or {}
+            for t in state.get("task_queue", []):
+                tid = t.get("id")
+                if t.get("status") != "pending" or tid in seen_tasks:
+                    continue
+                assignee = t.get("assigned_to")
+                if assignee in (None, "", args.agent):
+                    seen_tasks.add(tid)
+                    events.append({"kind": "open_task", "id": tid,
+                                   "title": t.get("title"),
+                                   "description": t.get("description"),
+                                   "priority": t.get("priority"),
+                                   "assigned_to": assignee})
+            return events
+
+        if args.once:
+            for ev in poll_once():
+                print(json.dumps(ev, ensure_ascii=False), flush=True)
+        else:
+            try:
+                while True:
+                    for ev in poll_once():
+                        print(json.dumps(ev, ensure_ascii=False), flush=True)
+                    time.sleep(args.interval)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                session.stop()
 
     elif args.action == "demo":
         with AgentSession(args.agent, role=args.role, capabilities=caps,
