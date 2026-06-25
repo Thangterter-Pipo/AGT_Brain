@@ -85,7 +85,7 @@ class Coordinator:
 
     def heartbeat(self, agent_id: str, role: str = "unknown",
                   status: str = "active", capabilities: list = None,
-                  current_task: str = None) -> dict:
+                  current_task: str = None, parent_id: str = None) -> dict:
         """Register or update agent presence. Call every 30-60s."""
         with _lock:
             state = self._read_state()
@@ -97,6 +97,7 @@ class Coordinator:
                 "status": status,
                 "capabilities": capabilities or existing.get("capabilities", []),
                 "current_task": current_task or existing.get("current_task"),
+                "parent_id": parent_id if parent_id is not None else existing.get("parent_id"),
                 "registered_at": existing.get("registered_at", now),
                 "last_heartbeat": now,
                 "_ts": self._now_ts(),

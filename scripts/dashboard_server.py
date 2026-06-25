@@ -1817,6 +1817,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
                     status=body.get("status", "active"),
                     capabilities=body.get("capabilities"),
                     current_task=body.get("current_task"),
+                    parent_id=body.get("parent_id"),
                 )
                 self._json_ok({"ok": True, "agent": result})
             except Exception as e:

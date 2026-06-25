@@ -3137,6 +3137,21 @@
             transition: stroke .4s;
         }
 
+        .cst-node.node-sm .cst-node-card {
+            padding: .5rem .6rem;
+            min-width: 120px; max-width: 138px;
+        }
+        .cst-node.node-sm .cst-node-avatar {
+            width: 28px; height: 28px; font-size: .7rem;
+        }
+        .cst-node.node-sm .cst-node-name { font-size: .72rem; }
+        .cst-node.node-sm .cst-node-role { font-size: .62rem; }
+        .cst-node.node-sm .cst-node-task { font-size: .68rem; }
+        .cst-link.child-link {
+            stroke-width: 1px;
+            stroke-dasharray: 4 3;
+            opacity: 0.5;
+        }
         .cst-link.busy {
             stroke: #a78bfa;
             stroke-width: 3;
@@ -5624,72 +5639,115 @@
             const stage = document.getElementById('constellation');
             if (!wrap || !stage) return;
             const W = stage.clientWidth, H = stage.clientHeight;
-            const cx = W / 2, cy = H * 0.42;             // tâm = vị trí core
+            const cx = W / 2, cy = H * 0.38;   // tâm orchestrator
 
-            // orchestrator core sub
+            // orchestrator core
             const orch = agents.find(a => ORCHESTRATOR_ROLES.includes((a.role || '').toLowerCase()) || ORCHESTRATOR_ROLES.includes(a.agent_id));
             document.getElementById('cst-core-sub').textContent = orch ? orch.agent_id : 'điều phối';
 
-            // các agent KHÔNG phải orchestrator → vây quanh
+            // Phân cấp: agent có parent_id → con của parent đó
+            // agent không có parent_id, không phải orchestrator → cấp 1 (nối Orchestrator)
             const others = agents.filter(a => a !== orch);
-            const n = Math.max(others.length, 1);
+            const level1 = others.filter(a => !a.parent_id);   // cấp 1 — nối Orchestrator
+            const level2 = others.filter(a => !!a.parent_id);  // cấp 2 — nối parent
 
-            // Bố trí trên cung ~160° phía trên (từ 190° tới 350°): node 2 cực vẫn cao
-            // hơn tâm → tạo VÒNG CUNG rõ, không nằm ngang ngang hub, không sát mép.
-            const NODE_W = 190, NODE_H = 150;            // kích thước card ước lượng
-            const mX = NODE_W / 2 + 24;                  // mép an toàn ngang (rộng hơn)
-            const mTop = NODE_H / 2 + 12;                // mép an toàn trên
-            const spread = Math.min(1.2, 0.74 + n * 0.05);
-            let radiusX = Math.min(W * 0.38 * spread, cx - mX);
-            let radiusY = Math.min(H * 0.36 * spread, cy - mTop);
-            radiusX = Math.max(radiusX, 90);
-            radiusY = Math.max(radiusY, 70);
-            const ARC_START = Math.PI * (190 / 180);       // 190°
-            const ARC_SPAN = Math.PI * (160 / 180);       // 160° → kết ở 350°
+            // Kích thước node theo cấp
+            const N1_W = 180, N1_H = 140;  // cấp 1
+            const N2_W = 140, N2_H = 110;  // cấp 2 (nhỏ hơn ~0.78x)
+            const mX = N1_W / 2 + 20, mTop = N1_H / 2 + 10;
 
-            // links svg
-            let links = '';
-            let nodesHtml = '';
-            others.forEach((a, i) => {
-                // 1 node → đỉnh; nhiều node → rải đều trên cung trên
-                const ang = n === 1
-                    ? -Math.PI / 2
-                    : ARC_START + (i / (n - 1)) * ARC_SPAN;
-                let x = cx + radiusX * Math.cos(ang);
-                let y = cy + radiusY * Math.sin(ang);
-                // kẹp trong mép để card không tràn khỏi khung
+            // Bố trí level1 trên cung 200° phía trên
+            const n1 = Math.max(level1.length, 1);
+            const spread = Math.min(1.2, 0.74 + n1 * 0.06);
+            let rX = Math.min(W * 0.36 * spread, cx - mX);
+            let rY = Math.min(H * 0.34 * spread, cy - mTop);
+            rX = Math.max(rX, 90); rY = Math.max(rY, 70);
+            const ARC_START = Math.PI * (190 / 180);
+            const ARC_SPAN  = Math.PI * (160 / 180);
+
+            // Map agent_id → tọa độ để nối link cấp 2
+            const posMap = {}; // agent_id → {x, y}
+            posMap[orch ? orch.agent_id : '__orch__'] = { x: cx, y: cy };
+
+            let links = '', nodesHtml = '';
+
+            // Render cấp 1
+            level1.forEach((a, i) => {
+                const ang = n1 === 1 ? -Math.PI / 2
+                    : ARC_START + (i / (n1 - 1)) * ARC_SPAN;
+                let x = cx + rX * Math.cos(ang);
+                let y = cy + rY * Math.sin(ang);
                 x = Math.max(mX, Math.min(W - mX, x));
-                y = Math.max(mTop, Math.min(H - NODE_H / 2 - 8, y));
-                const task = taskForAgent(tasks, a.agent_id);
-                // busy chỉ khi có task được giao và đang active/in_progress
-                const busy = isBusy(task);
-                // Agent live nhưng không có task → hiện badge thông tin nhẹ (không animate)
-                const agentActive = !a.stale && (a.status === 'active' || a.status === 'in_progress');
-                links += `<line class="cst-link ${busy ? 'busy' : ''}" x1="${cx}" y1="${cy}" x2="${x}" y2="${y}"></line>`;
+                y = Math.max(mTop, Math.min(H - N1_H / 2 - 8, y));
+                posMap[a.agent_id] = { x, y };
 
-                const stateCls = busy ? 'busy' : (a.stale ? 'stale' : 'live');
-                const avatar = (a.agent_id || '?').slice(0, 2).toUpperCase();
-                let taskHtml = '<div class="cst-node-task muted" style="opacity:.6">— rảnh —</div>';
-                if (task) {
-                    const ck = task.checklist || [];
-                    const done = ck.filter(c => c.done).length;
-                    const pct = ck.length ? Math.round(done * 100 / ck.length) : (task.status === 'done' ? 100 : 0);
-                    const checks = ck.slice(0, 6).map(c =>
-                        `<label class="cst-check ${c.done ? 'done' : ''}">
-                        <input type="checkbox" ${c.done ? 'checked' : ''} onchange="toggleCheck('${task.id}','${c.id}',this.checked)">
-                        <span>${escapeHtml(c.text)}</span>
-                    </label>`).join('');
-                    taskHtml = `<div class="cst-node-task">
+                const task = taskForAgent(tasks, a.agent_id);
+                const busy = isBusy(task);
+                links += `<line class="cst-link ${busy ? 'busy' : ''}" x1="${cx}" y1="${cy}" x2="${x}" y2="${y}"></line>`;
+                nodesHtml += _nodeHtml(a, task, busy, x, y, N1_W, N1_H, 1);
+            });
+
+            // Render cấp 2 — phân nhánh quanh parent
+            // Gom con theo parent
+            const childrenOf = {};
+            level2.forEach(a => {
+                const pid = a.parent_id;
+                if (!childrenOf[pid]) childrenOf[pid] = [];
+                childrenOf[pid].push(a);
+            });
+            Object.entries(childrenOf).forEach(([pid, children]) => {
+                const pp = posMap[pid] || { x: cx, y: cy };
+                const nc = children.length;
+                // Cung nhỏ 120° hướng ra xa tâm từ vị trí parent
+                const baseAng = Math.atan2(pp.y - cy, pp.x - cx);
+                const childSpan = Math.PI * 0.65;
+                const childR = 130; // bán kính nhánh con
+                children.forEach((a, i) => {
+                    const ang = nc === 1
+                        ? baseAng
+                        : baseAng - childSpan / 2 + (i / (nc - 1)) * childSpan;
+                    let x = pp.x + childR * Math.cos(ang);
+                    let y = pp.y + childR * Math.sin(ang);
+                    x = Math.max(N2_W / 2 + 8, Math.min(W - N2_W / 2 - 8, x));
+                    y = Math.max(N2_H / 2 + 8, Math.min(H - N2_H / 2 - 8, y));
+                    posMap[a.agent_id] = { x, y };
+
+                    const task = taskForAgent(tasks, a.agent_id);
+                    const busy = isBusy(task);
+                    // Link nối vào PARENT, không vào Orchestrator
+                    links += `<line class="cst-link child-link ${busy ? 'busy' : ''}" x1="${pp.x}" y1="${pp.y}" x2="${x}" y2="${y}"></line>`;
+                    nodesHtml += _nodeHtml(a, task, busy, x, y, N2_W, N2_H, 2);
+                });
+            });
+
+            svg.innerHTML = links;
+            wrap.innerHTML = nodesHtml;
+        }
+
+        // Helper render 1 node card
+        function _nodeHtml(a, task, busy, x, y, nw, nh, level) {
+            const stateCls = busy ? 'busy' : (a.stale ? 'stale' : 'live');
+            const sizeCls  = level === 2 ? 'node-sm' : '';
+            const avatar   = (a.agent_id || '?').slice(0, 2).toUpperCase();
+            let taskHtml   = `<div class="cst-node-task muted" style="opacity:.6">— rảnh —</div>`;
+            if (task) {
+                const ck   = task.checklist || [];
+                const done = ck.filter(c => c.done).length;
+                const pct  = ck.length ? Math.round(done * 100 / ck.length) : (task.status === 'done' ? 100 : 0);
+                const checks = ck.slice(0, level === 2 ? 3 : 6).map(c =>
+                    `<label class="cst-check ${c.done ? 'done' : ''}">
+                    <input type="checkbox" ${c.done ? 'checked' : ''} onchange="toggleCheck('${task.id}','${c.id}',this.checked)">
+                    <span>${escapeHtml(c.text)}</span></label>`).join('');
+                taskHtml = `<div class="cst-node-task">
                     <span class="tt">📋 ${escapeHtml(task.title)}</span>
-                    ${ck.length ? `<div class="cst-prog"><i style="width:${pct}%"></i></div>
-                    <div class="cst-prog-label">${done}/${ck.length} bước · ${pct}%</div>
-                    <div class="cst-checks">${checks}</div>` : `<div class="cst-prog-label">trạng thái: ${escapeHtml(task.status)}</div>`}
+                    ${ck.length
+                        ? `<div class="cst-prog"><i style="width:${pct}%"></i></div>
+                           <div class="cst-prog-label">${done}/${ck.length} · ${pct}%</div>
+                           <div class="cst-checks">${checks}</div>`
+                        : `<div class="cst-prog-label">${escapeHtml(task.status)}</div>`}
                 </div>`;
-                } else if (agentActive) {
-                    // live nhưng không có task → rảnh như các agent khác
-                    taskHtml = '<div class="cst-node-task muted" style="opacity:.6">— rảnh —</div>';
-                }
-                nodesHtml += `<div class="cst-node ${stateCls}" style="left:${x}px;top:${y}px">
+            }
+            return `<div class="cst-node ${stateCls} ${sizeCls}" style="left:${x}px;top:${y}px;--nw:${nw}px">
                 <div class="cst-node-card">
                     <div class="cst-node-top">
                         <div class="cst-node-avatar">${escapeHtml(avatar)}</div>
@@ -5702,9 +5760,6 @@
                     ${taskHtml}
                 </div>
             </div>`;
-            });
-            svg.innerHTML = links;
-            wrap.innerHTML = nodesHtml;
         }
 
         // Tick checklist → gọi backend → reload
