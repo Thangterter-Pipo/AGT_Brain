@@ -431,6 +431,14 @@
             position: relative;
         }
 
+        /* Constellation view: flex-row để .constellation + .chat-rail nằm cạnh nhau */
+        #view-constellation.active {
+            display: flex;
+            flex-direction: row;
+            height: 100%;
+            overflow: hidden;
+        }
+
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -1928,6 +1936,32 @@
             border-color: rgba(251, 191, 36, 0.3) !important;
         }
 
+        /* Bubble từ IDE (Antigravity báo cáo) — tím nhạt, căn trái */
+        .chat-row.ide-report {
+            justify-content: flex-start;
+        }
+        .chat-bubble.bubble-ide {
+            background: rgba(124, 77, 255, 0.08);
+            border: 1px solid rgba(124, 77, 255, 0.3);
+            max-width: 92%;
+        }
+        .chat-bubble.bubble-ide .cb-from::before {
+            content: '🤖 ';
+        }
+        .chat-bubble.bubble-ide .cb-avatar {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px; height: 26px;
+            border-radius: 50%;
+            background: rgba(124, 77, 255, 0.25);
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--accent);
+            flex-shrink: 0;
+            margin-right: 0.5rem;
+        }
+
         .coord-composer {
             display: flex;
             gap: 0.5rem;
@@ -2870,7 +2904,8 @@
         /* ===================== CONSTELLATION (star view) ===================== */
         .constellation {
             position: relative;
-            width: 100%;
+            flex: 1;           /* chiếm phần còn lại sau .chat-rail trong flex-row */
+            width: 0;          /* flex-basis=0, flex:1 lo phần còn lại */
             height: calc(100vh - 150px);
             min-height: 560px;
             overflow: hidden;
@@ -3275,7 +3310,7 @@
         /* ── Khung chat realtime: cột cố định bên phải, cao full màn hình ── */
         .chat-rail {
             width: 312px; flex-shrink: 0; display: flex; flex-direction: column;
-            height: 100vh; position: sticky; top: 0;
+            height: 100%; /* fill chiều cao #view-constellation thay vì 100vh */
             background: rgba(10, 10, 20, 0.82); backdrop-filter: blur(var(--glass-blur));
             border-left: 1px solid var(--border);
             transition: width 0.28s cubic-bezier(0.4,0,0.2,1);
@@ -3837,6 +3872,20 @@
                         <div id="task-list"></div><span id="lock-count-hint"></span>
                         <div id="lock-list"></div>
                     </div>
+
+                    <!-- ===== KHUNG CHAT REALTIME — nằm trong view-constellation ===== -->
+                    <aside class="chat-rail" id="cst-chat">
+                        <div class="cst-chat-head">
+                            <span class="cst-chat-toggle" id="cst-chat-toggle" onclick="toggleChatPanel()" title="Thu gọn / mở khung chat">⟩</span>
+                            <span>💬 Báo cáo realtime</span>
+                            <span class="panel-hint" id="coord-online-hint">0 online</span>
+                        </div>
+                        <div id="coord-msg-list" class="cst-chat-stream"></div>
+                        <div class="cst-composer">
+                            <input type="text" id="chat-input" class="coord-chat-input" placeholder="Nhắn Orchestrator..." autocomplete="off">
+                            <button class="btn btn-primary" id="chat-send-btn" onclick="sendChatMessage()">Gửi</button>
+                        </div>
+                    </aside>
                 </div>
 
                 <!-- ===== VIEW: AGENTS (tất cả agent trên máy + bật/tắt) ===== -->
@@ -3957,19 +4006,6 @@
             </div>
         </div>
 
-        <!-- ===== KHUNG CHAT REALTIME (cột cố định bên phải, ngoài .main) ===== -->
-        <aside class="chat-rail" id="cst-chat">
-            <div class="cst-chat-head">
-                <span class="cst-chat-toggle" id="cst-chat-toggle" onclick="toggleChatPanel()" title="Thu gọn / mở khung chat">⟩</span>
-                <span>💬 Báo cáo realtime</span>
-                <span class="panel-hint" id="coord-online-hint">0 online</span>
-            </div>
-            <div id="coord-msg-list" class="cst-chat-stream"></div>
-            <div class="cst-composer">
-                <input type="text" id="chat-input" class="coord-chat-input" placeholder="Nhắn Orchestrator..." autocomplete="off">
-                <button class="btn btn-primary" id="chat-send-btn" onclick="sendChatMessage()">Gửi</button>
-            </div>
-        </aside>
     </div>
 
     <!-- ===== ADD MEMORY MODAL ===== -->
@@ -5259,15 +5295,45 @@
 
         // ─── Khung chat realtime ĐỘC LẬP (chạy ở MỌI view) ───
         let _chatStreamPoll = null;
+        // Convert IDE transcript messages (Antigravity nói trong cửa sổ IDE) sang
+        // shape chat-rail. Chỉ lấy phản hồi của assistant (Antigravity) — tin user
+        // trong IDE thường là coordination relay đã có sẵn ở /api/coord, bỏ để khỏi trùng.
+        function ideMsgsToChat(ideMsgs) {
+            return (ideMsgs || [])
+                .filter(m => m.role === 'assistant' && (m.content || '').trim())
+                .map(m => ({
+                    from: 'antigravity-ide',
+                    to: null,
+                    content: m.content,
+                    created_at: m.created_at || null,
+                    _src: 'ide',
+                }));
+        }
         async function refreshChatStream() {
             try {
-                const r = await fetch('/api/coord/state');
-                const state = await r.json();
-                renderChatStream(state.messages || []);
-                const agents = Object.values(state.agents || {});
-                const live = agents.filter(a => !a.stale).length;
+                const [stateR, ideR, agentsR] = await Promise.allSettled([
+                    fetch('/api/coord/state').then(r => r.json()),
+                    fetch('/api/ide/chat').then(r => r.json()),
+                    fetch('/api/coord/agents').then(r => r.json()),  // probe thật → stale chính xác
+                ]);
+                const state = stateR.status === 'fulfilled' ? stateR.value : {};
+                const ide = ideR.status === 'fulfilled' ? ideR.value : {};
+                // Dùng probed agents nếu có, fallback về state.agents
+                const probedAgents = agentsR.status === 'fulfilled' && agentsR.value && typeof agentsR.value === 'object'
+                    ? Object.values(agentsR.value)
+                    : Object.values(state.agents || {});
+                const coordMsgs = state.messages || [];
+                const ideMsgs = ideMsgsToChat(ide.messages || []);
+                // Gộp 2 nguồn, sort theo thời gian (tin thiếu created_at xếp cuối theo thứ tự gốc).
+                const merged = [...coordMsgs, ...ideMsgs].sort((a, b) => {
+                    const ta = a.created_at ? Date.parse(a.created_at) : Infinity;
+                    const tb = b.created_at ? Date.parse(b.created_at) : Infinity;
+                    return ta - tb;
+                });
+                renderChatStream(merged);
+                const live = probedAgents.filter(a => !a.stale).length;
                 const hint = document.getElementById('coord-online-hint');
-                if (hint) hint.textContent = `${live}/${agents.length} online`;
+                if (hint) hint.textContent = `${live}/${probedAgents.length} online`;
             } catch (e) { /* im lặng, lần sau thử lại */ }
         }
         function startChatStream() {
@@ -5390,8 +5456,8 @@
                 const tasks = (state.task_queue || []);
                 renderConstellation(agents, tasks);
 
-                // ── Chat stream (the star) ──
-                renderChatStream(state.messages || []);
+                // ── Chat stream (the star) — dùng nguồn merged (coord + IDE) ──
+                refreshChatStream();
             } catch (e) {
                 console.error('Error loading agent panel:', e);
             }
@@ -5451,7 +5517,9 @@
                 x = Math.max(mX, Math.min(W - mX, x));
                 y = Math.max(mTop, Math.min(H - NODE_H / 2 - 8, y));
                 const task = taskForAgent(tasks, a.agent_id);
-                const busy = isBusy(task);
+                // Agent live (không stale) + status=active → coi là busy dù chưa có task assign
+                const agentActive = !a.stale && (a.status === 'active' || a.status === 'in_progress');
+                const busy = isBusy(task) || agentActive;
                 links += `<line class="cst-link ${busy ? 'busy' : ''}" x1="${cx}" y1="${cy}" x2="${x}" y2="${y}"></line>`;
 
                 const stateCls = busy ? 'busy' : (a.stale ? 'stale' : 'live');
@@ -5472,6 +5540,12 @@
                     <div class="cst-prog-label">${done}/${ck.length} bước · ${pct}%</div>
                     <div class="cst-checks">${checks}</div>` : `<div class="cst-prog-label">trạng thái: ${escapeHtml(task.status)}</div>`}
                 </div>`;
+                } else if (agentActive) {
+                    // Không có task nhưng agent đang live → hiện badge "đang hoạt động"
+                    taskHtml = `<div class="cst-node-task" style="opacity:.85">
+                        <span class="tt">⚡ Đang hoạt động</span>
+                        <div class="cst-prog-label" style="color:var(--accent)">live · không có task được giao</div>
+                    </div>`;
                 }
                 nodesHtml += `<div class="cst-node ${stateCls}" style="left:${x}px;top:${y}px">
                 <div class="cst-node-card">
@@ -5531,13 +5605,20 @@
             const wasNearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 80;
             stream.innerHTML = msgs.slice(-80).map(m => {
                 const t = m.created_at ? new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
-                const isBroadcast = !m.to;
+                const isIde = m._src === 'ide';
+                const isBroadcast = !m.to && !isIde;
                 const isBoss = (m.from === 'Bố' || m.from === 'bo');
-                const toLabel = isBroadcast ? '📢 all' : `→ ${escapeHtml(m.to)}`;
+                const toLabel = m.to ? `→ ${escapeHtml(m.to)}` : (isIde ? '📋 IDE report' : '📢 all');
                 const col = agentColor(m.from);
-                return `<div class="chat-row ${isBroadcast ? 'broadcast' : 'directed'}">
-                <div class="chat-bubble ${isBoss ? 'bubble-boss' : ''}">
+                const rowCls = isIde ? 'ide-report' : (isBroadcast ? 'broadcast' : 'directed');
+                const bubbleCls = isIde ? 'bubble-ide' : (isBoss ? 'bubble-boss' : '');
+                const avatar = isIde
+                    ? `<span class="cb-avatar">${(m.from || 'AI').slice(0, 2).toUpperCase()}</span>`
+                    : '';
+                return `<div class="chat-row ${rowCls}">
+                <div class="chat-bubble ${bubbleCls}">
                     <div class="cb-head">
+                        ${avatar}
                         <span class="cb-from" style="color:${col};">${escapeHtml(m.from)}</span>
                         <span class="cb-to">${toLabel}</span>
                         <span class="cb-time">${t}</span>
