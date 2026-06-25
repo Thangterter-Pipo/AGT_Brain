@@ -1919,13 +1919,38 @@ class CustomHandler(SimpleHTTPRequestHandler):
                 if not from_agent or not content:
                     self._json_err(400, "from_agent and content required")
                     return
+                msg_type = body.get("type", "info")
+                to_agent = body.get("to_agent")
                 msg = COORD.send_message(
                     from_agent=from_agent,
                     content=content,
-                    to_agent=body.get("to_agent"),
-                    msg_type=body.get("type", "info"),
+                    to_agent=to_agent,
+                    msg_type=msg_type,
                 )
-                self._json_ok({"ok": True, "message": msg})
+                auto_task = None
+                completed_task = None
+                if msg_type == "task" and to_agent:
+                    # Giao việc → tạo task in_progress cho to_agent
+                    title = body.get("task_title") or content[:80]
+                    auto_task = COORD.post_task(
+                        title=title,
+                        description=content,
+                        assigned_to=to_agent,
+                        priority=body.get("priority", 5),
+                        posted_by=from_agent,
+                    )
+                    COORD.update_task(auto_task["id"], status="in_progress", assigned_to=to_agent)
+                    auto_task["status"] = "in_progress"
+                elif msg_type in ("reply", "info", "done") and from_agent:
+                    # Agent gửi reply → tự hoàn thành task in_progress của nó
+                    state = COORD._read_state()
+                    for task in reversed(state.get("task_queue", [])):
+                        if (task.get("assigned_to") == from_agent
+                                and task.get("status") == "in_progress"):
+                            COORD.update_task(task["id"], status="done")
+                            completed_task = task["id"]
+                            break
+                self._json_ok({"ok": True, "message": msg, "auto_task": auto_task, "completed_task": completed_task})
             except Exception as e:
                 self._json_err(500, str(e))
             return
