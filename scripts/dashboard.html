@@ -5394,10 +5394,21 @@
 
         // Re-vẽ constellation khi resize (node định vị theo px)
         let _cstResizeT = null;
+        let _lastAgentRenderData = null; // cache data lần render cuối
         window.addEventListener('resize', () => {
             if (!document.getElementById('view-constellation').classList.contains('active')) return;
             clearTimeout(_cstResizeT);
-            _cstResizeT = setTimeout(loadAgentPanel, 200);
+            _cstResizeT = setTimeout(() => {
+                // requestAnimationFrame đảm bảo browser đã settle flex layout
+                requestAnimationFrame(() => {
+                    if (_lastAgentRenderData) {
+                        const { agents, tasks } = _lastAgentRenderData;
+                        renderConstellation(agents, tasks);
+                    } else {
+                        loadAgentPanel();
+                    }
+                });
+            }, 320); // > transition 0.28s
         });
 
         function startCoordSSE() {
@@ -5607,6 +5618,7 @@
             return mine[0] || null;
         }
         function renderConstellation(agents, tasks) {
+            _lastAgentRenderData = { agents, tasks }; // cache để resize không cần fetch lại
             const wrap = document.getElementById('cst-nodes');
             const svg = document.getElementById('cst-links');
             const stage = document.getElementById('constellation');
