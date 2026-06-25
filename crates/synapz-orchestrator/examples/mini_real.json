@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {
+      "id": "hello-rust",
+      "prompt": "Viết hàm Rust in ra 'hello'. CHỈ trả code, không giải thích.",
+      "role": "Coder",
+      "depends_on": []
+    },
+    {
+      "id": "hello-py",
+      "prompt": "Viết hàm Python in ra 'hello'. CHỈ trả code, không giải thích.",
+      "role": "Coder",
+      "depends_on": []
+    }
+  ]
+}

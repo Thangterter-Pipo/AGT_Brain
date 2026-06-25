@@ -18,12 +18,14 @@ Cargo.lock
 # Secrets — NEVER commit
 /data/
 /memory/
-grok2api_local/
-grok2api_data/
 .env
 .env.local
 *.env
 !.env.example
+# Runtime config chứa token/secret (token bot, key...) — KHÔNG commit
+scripts/telegram_bridge.json
+*_config.json
+*.secret.json
 
 # OS junk
 Thumbs.db
@@ -43,8 +45,15 @@ agt-mcp
 # Scratch
 scratch/
 
+# Logs & runtime junk
+*.log
+HERMES.md
+img_probe.py
+scripts/.attachments/
+
 # Portable Toolchain
 mingw/
+.toolchain/
 
 # Screenshots & Images
 *.png
@@ -55,6 +64,7 @@ mingw/
 
 
 *.bak
+*.bak-*
 
 # Scripts upload cache
 scripts/.upload_cache/

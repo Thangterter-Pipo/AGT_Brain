@@ -8,20 +8,13 @@ Tài liệu này hướng dẫn mọi AI agent khi làm việc trong workspace `
 - **Mục đích**: Bộ não của AI coding assistant — Memory, Tools, MCP Server, Subagent Integrations
 - **Build**: `cargo build` tại root
 
-## 2-AI Team Architecture
+## Single-Agent Architecture
 
 ```
-Bố (User) → Antigravity (THE BUILDER) → Grok "Gravity" (RESEARCHER)
+Bố (User) → Antigravity (THE BUILDER & ORCHESTRATOR)
 ```
 
-| Tác vụ | Route tới |
-|--------|-----------|
-| Research công nghệ mới | **Grok** (research mode) |
-| Quyết định kiến trúc | **Grok** (think mode) |
-| Code review | **Grok** (review mode) |
-| Debug logic / verify | **Grok** (think mode) |
-| Viết documentation | **Antigravity** (trực tiếp) |
-| Implement feature | **Antigravity** (trực tiếp) |
+Antigravity là Agent duy nhất đảm nhận toàn bộ các vai trò trong hệ thống, bao gồm tự nghiên cứu, đưa ra quyết định kiến trúc, phát triển code, phản tỉnh và tự động tương tác với IDE.
 
 ## Architecture
 
@@ -29,11 +22,12 @@ Bố (User) → Antigravity (THE BUILDER) → Grok "Gravity" (RESEARCHER)
 E:\AGT_Brain\
 ├── crates/
 │   ├── synapz-memory/     # Supabase cloud memory (reqwest REST + sync queue + archive + pgvector)
-│   ├── synapz-tools/      # Agent tools: file(6) + shell(1) + web(2) + memory(5) + grok(2)
-│   └── synapz-mcp/        # MCP Server (rmcp, stdio — 10 tools exposed to IDE)
+│   ├── synapz-tools/      # Agent tools: file(6) + shell(1) + web(2) + memory(5)
+│   ├── synapz-mcp/        # MCP Server (rmcp, stdio — 10 tools exposed to IDE)
+│   └── synapz-orchestrator/ # Local multi-agent điều phối (Tokio): task graph, pipeline, parallel executor, git isolation, smart merge
 ├── memory/             # Local persistent: decisions/ + incidents/ (append-only)
 ├── data/               # supabase_config.json, goals.json
-├── Agent_Profiles/     # Identity docs (Antigravity.md, How_We_Work.md, Grok.json)
+├── Agent_Profiles/     # Identity docs (Antigravity.md, How_We_Work.md)
 ├── scripts/            # Automation scripts + dashboard.html
 ├── Cargo.toml          # Workspace root
 └── .gitignore
@@ -56,8 +50,6 @@ E:\AGT_Brain\
 | 11 | `coord_release` | 🔓 Release the edit lock on a file when done |
 | 12 | `coord_status` | 📊 See which agents are active and what files are locked |
 
-> Note: Grok tools (`ask_grok`, `grok_health`) live in the separate **HeimdallProxy** repo, not here.
-
 ## Shared Memory System
 
 **Primary**: Supabase Cloud (PostgreSQL) — `memories` table
@@ -73,11 +65,7 @@ E:\AGT_Brain\
 
 ## Subagent Access
 
-### Grok — `crates/synapz-tools/src/grok.rs`
-- **Endpoint**: `http://127.0.0.1:8000` (grok2api)
-- **Models**: grok-3, grok-3-mini, grok-3-thinking, grok-4, grok-4-thinking, grok-4-heavy
-- **Modes**: research, think, review, brainstorm, chat
-- **CLI**: `ask-grok --mode research "topic"`
+(Hệ thống hiện tại chạy ở chế độ Single-Agent, không còn sử dụng các subagents khác ngoài 9Router API gateway)
 
 ## CDP Autonomous Mode
 
@@ -105,14 +93,13 @@ E:\AGT_Brain\
 | `memory/MEMORY_SCHEMA.md` | Database schema docs (10 columns + pgvector) |
 | `Agent_Profiles/Antigravity.md` | Agent identity |
 | `Agent_Profiles/How_We_Work.md` | Operating procedures |
-| `Agent_Profiles/Grok.json` | Grok subagent config + Gravity Framework |
 | `scripts/dashboard.html` | Admin dashboard (open in browser) |
 | `relaunch_antigravity_cdp.bat` | CDP launch for autonomous control |
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **AGT_Brain** (595 symbols, 864 relationships, 12 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **SynapzCore** (1745 symbols, 3136 relationships, 132 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -135,10 +122,10 @@ This project is indexed by GitNexus as **AGT_Brain** (595 symbols, 864 relations
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/AGT_Brain/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/AGT_Brain/clusters` | All functional areas |
-| `gitnexus://repo/AGT_Brain/processes` | All execution flows |
-| `gitnexus://repo/AGT_Brain/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/SynapzCore/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/SynapzCore/clusters` | All functional areas |
+| `gitnexus://repo/SynapzCore/processes` | All execution flows |
+| `gitnexus://repo/SynapzCore/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

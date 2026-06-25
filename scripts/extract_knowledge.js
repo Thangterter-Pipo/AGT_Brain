@@ -4,7 +4,7 @@
  * Pipeline:
  * 1. Parse tất cả conversation logs (JSONL)
  * 2. Tóm tắt từng conversation thành digest
- * 3. Gửi digest qua Grok Heavy để trích xuất kiến thức
+ * 3. Gửi digest qua 9Router LLM để trích xuất kiến thức
  * 4. Lưu thành knowledge_base.json
  * 
  * Usage: node extract_knowledge.js
@@ -15,8 +15,9 @@ import { join } from 'path';
 
 const BRAIN_DIR = 'C:\\Users\\thang\\.gemini\\antigravity\\brain';
 const OUTPUT_DIR = 'E:\\AGT_Brain\\data\\knowledge';
-const GROK_API = 'http://localhost:8000/v1/chat/completions';
-const GROK_MODEL = 'grok-3';
+const API_URL = process.env.NINEROUTER_URL ? `${process.env.NINEROUTER_URL}/v1/chat/completions` : 'http://localhost:20128/v1/chat/completions';
+const API_KEY = process.env.NINEROUTER_KEY || 'sk-f7d8d77f96db61e1-gv5z1w-64ae04b4';
+const LLM_MODEL = 'ag/gemini-3-flash';
 
 // ─── Step 1: Parse all conversations ───
 function parseConversations() {
@@ -86,7 +87,7 @@ function parseConversations() {
   return conversations.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// ─── Step 2: Create digest for Grok ───
+// ─── Step 2: Create digest for LLM ───
 function createDigest(conv) {
   let digest = `## Conversation ${conv.id.substring(0, 8)}\n`;
   digest += `Date: ${conv.date} → ${conv.lastDate}\n`;
@@ -107,8 +108,8 @@ function createDigest(conv) {
   return digest.substring(0, 3500);
 }
 
-// ─── Step 3: Call Grok to extract knowledge ───
-async function extractWithGrok(digest, convId) {
+// ─── Step 3: Call LLM to extract knowledge ───
+async function extractWithLLM(digest, convId) {
   const systemPrompt = `You are a Knowledge Extraction Engine. Analyze the conversation digest and extract ALL valuable knowledge into structured categories.
 
 Output ONLY valid JSON (no markdown, no code fences) with this exact structure:
@@ -131,7 +132,7 @@ Rules:
 - Focus on reusable knowledge, not conversation mechanics`;
 
   const body = JSON.stringify({
-    model: GROK_MODEL,
+    model: LLM_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `Extract knowledge from this conversation:\n\n${digest}` }
@@ -141,9 +142,13 @@ Rules:
   });
 
   try {
-    const response = await fetch(GROK_API, {
+    const headers = { 'Content-Type': 'application/json' };
+    if (API_KEY) {
+      headers['Authorization'] = `Bearer ${API_KEY}`;
+    }
+    const response = await fetch(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body,
       signal: AbortSignal.timeout(120000), // 2 min timeout
     });
@@ -154,7 +159,7 @@ Rules:
       return null;
     }
 
-    // Handle SSE streaming response (grok2api always streams)
+    // Handle SSE streaming response (some providers always stream)
     const rawText = await response.text();
     let content = '';
     
@@ -220,7 +225,7 @@ async function main() {
     console.log(`🔍 [${processed}/${conversations.length}] Processing ${shortId} (${conv.date.substring(0, 10)}, ${conv.totalSteps} steps)...`);
     
     const digest = createDigest(conv);
-    const knowledge = await extractWithGrok(digest, conv.id);
+    const knowledge = await extractWithLLM(digest, conv.id);
     
     if (knowledge) {
       knowledgeBase.push({

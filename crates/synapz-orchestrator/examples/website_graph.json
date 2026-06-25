@@ -1,0 +1,34 @@
+{
+  "nodes": [
+    {
+      "id": "api-login",
+      "prompt": "Viết Rust handler API đăng nhập (POST /login) trả JWT",
+      "role": "Coder",
+      "depends_on": []
+    },
+    {
+      "id": "api-payment",
+      "prompt": "Viết Rust handler API thanh toán (POST /pay) tích hợp Stripe mock",
+      "role": "Coder",
+      "depends_on": []
+    },
+    {
+      "id": "ui-frontend",
+      "prompt": "Thiết kế giao diện React trang đăng nhập + thanh toán",
+      "role": "Coder",
+      "depends_on": []
+    },
+    {
+      "id": "integration",
+      "prompt": "Ghép API login + payment + UI thành luồng hoàn chỉnh",
+      "role": "Coder",
+      "depends_on": ["api-login", "api-payment", "ui-frontend"]
+    },
+    {
+      "id": "e2e-test",
+      "prompt": "Viết test end-to-end cho luồng login → payment",
+      "role": "Tester",
+      "depends_on": ["integration"]
+    }
+  ]
+}

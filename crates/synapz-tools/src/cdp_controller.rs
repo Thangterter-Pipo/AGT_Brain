@@ -219,18 +219,29 @@ impl CdpController {
     }
 
     /// Auto-accept file edits proposed by the AI.
+    /// Prefers the Composer "Accept all" control (Antigravity renders it as a
+    /// clickable <span>), falling back to individual accept/apply buttons.
     pub async fn auto_accept_edits(&mut self) -> Result<u32> {
         let js = r#"
             (function() {
                 var accepted = 0;
-                // Find accept buttons for file edits
+                // 1. Composer "Accept all" (span-based, Cursor-style widget)
+                var spans = document.querySelectorAll('span, button');
+                for (var i = 0; i < spans.length; i++) {
+                    var t = (spans[i].innerText || '').trim().toLowerCase();
+                    if (t === 'accept all') {
+                        spans[i].click();
+                        return 1;
+                    }
+                }
+                // 2. Fallback: individual accept/apply buttons
                 var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    var text = btns[i].innerText.toLowerCase();
-                    var label = (btns[i].getAttribute('aria-label') || '').toLowerCase();
+                for (var j = 0; j < btns.length; j++) {
+                    var text = (btns[j].innerText || '').toLowerCase();
+                    var label = (btns[j].getAttribute('aria-label') || '').toLowerCase();
                     if (text.includes('accept') || text.includes('apply') ||
                         label.includes('accept') || label.includes('apply')) {
-                        btns[i].click();
+                        btns[j].click();
                         accepted++;
                     }
                 }
@@ -246,50 +257,165 @@ impl CdpController {
         Ok(count)
     }
 
-    /// Switch the IDE model (e.g., to Claude Sonnet, Gemini, etc.)
-    pub async fn switch_model(&mut self, model_name: &str) -> Result<()> {
-        let escaped = model_name.replace('\'', "\\'");
+    /// Auto-allow permission/approval dialogs (run command, MCP tool calls, etc.).
+    /// Technique adapted from LazyGravity's approvalDetector: locate an Allow
+    /// button, verify a matching Deny button exists in the same container to
+    /// avoid false-positives, then click Allow. Prefers "Allow once".
+    /// Returns true if an approval was clicked.
+    pub async fn auto_allow(&mut self) -> Result<bool> {
+        let js = r#"
+            (function() {
+                var ALLOW_ONCE = ['allow once', 'allow one time', '今回のみ許可', '1回のみ許可'];
+                var ALWAYS_ALLOW = ['allow this conversation', 'allow this chat', 'always allow', '常に許可'];
+                var ALLOW = ['allow', 'permit', 'accept', '許可', '承認'];
+                var DENY = ['deny', 'reject', 'decline', '拒否'];
+                var norm = function(s){ return (s||'').toLowerCase().replace(/\s+/g,' ').trim(); };
+
+                var all = Array.prototype.slice.call(document.querySelectorAll('button'))
+                    .filter(function(b){ return b.offsetParent !== null; });
+
+                // Prefer "Allow once"
+                var approve = all.find(function(b){
+                    var t = norm(b.textContent);
+                    return ALLOW_ONCE.some(function(p){ return t.indexOf(p) !== -1; });
+                });
+                // Then generic Allow (excluding "always allow")
+                if (!approve) {
+                    approve = all.find(function(b){
+                        var t = norm(b.textContent);
+                        var isAlways = ALWAYS_ALLOW.some(function(p){ return t.indexOf(p) !== -1; });
+                        return !isAlways && ALLOW.some(function(p){ return t.indexOf(p) !== -1; });
+                    });
+                }
+                if (!approve) return 'no_approval';
+
+                var container = approve.closest('[role="dialog"], .modal, .dialog, .monaco-dialog-box')
+                    || (approve.parentElement && approve.parentElement.parentElement)
+                    || approve.parentElement
+                    || document.body;
+
+                var cbtns = Array.prototype.slice.call(container.querySelectorAll('button'))
+                    .filter(function(b){ return b.offsetParent !== null; });
+                var deny = cbtns.find(function(b){
+                    var t = norm(b.textContent);
+                    return DENY.some(function(p){ return t.indexOf(p) !== -1; });
+                });
+                if (!deny) return 'no_deny_guard';
+
+                approve.click();
+                return 'allowed';
+            })()
+        "#;
+
+        let result = self.evaluate_js(js).await?;
+        let outcome = result.get("value").and_then(|v| v.as_str()).unwrap_or("");
+        if outcome == "allowed" {
+            eprintln!("🔓 Auto-allowed an approval dialog");
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Detect whether the IDE is currently generating a response.
+    /// Uses the Cancel button tooltip marker present while streaming.
+    pub async fn is_generating(&mut self) -> Result<bool> {
+        let js = r#"
+            (function() {
+                var els = document.querySelectorAll('[data-tooltip-id="input-send-button-cancel-tooltip"]');
+                for (var i = 0; i < els.length; i++) {
+                    var s = window.getComputedStyle(els[i]);
+                    if (s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity) > 0) {
+                        return true;
+                    }
+                }
+                // Fallback: a visible Cancel button
+                return !!document.querySelector('button[aria-label^="Cancel"]');
+            })()
+        "#;
+        let result = self.evaluate_js(js).await?;
+        Ok(result.get("value").and_then(|v| v.as_bool()).unwrap_or(false))
+    }
+
+    /// Switch the IDE model (e.g., to Claude Sonnet, Gemini, etc.).
+    /// Uses the real Antigravity selector `button[aria-label^="Select model, current:"]`
+    /// and the Monaco quick-input list. Returns the outcome string.
+    pub async fn switch_model(&mut self, model_name: &str) -> Result<String> {
+        let escaped = model_name.replace('\\', "\\\\").replace('\'', "\\'");
         let js = format!(r#"
             (function() {{
-                // Click model selector dropdown
-                var selector = document.querySelector('[data-testid="model-selector"], .model-selector, button[aria-label*="model"]');
-                if (selector) {{
-                    selector.click();
-                    // Wait a bit then click the target model
+                return new Promise(function(resolve) {{
+                    var target = '{escaped}'.toLowerCase();
+                    var btn = document.querySelector('button[aria-label^="Select model, current:"]');
+                    if (!btn) {{ resolve('no_model_button'); return; }}
+                    btn.click();
                     setTimeout(function() {{
-                        var options = document.querySelectorAll('[data-testid*="model"], .model-option, [role="option"]');
-                        for (var i = 0; i < options.length; i++) {{
-                            if (options[i].innerText.toLowerCase().includes('{escaped}'.toLowerCase())) {{
-                                options[i].click();
-                                return 'switched';
-                            }}
+                        // Antigravity model picker = Tailwind popup of full-width
+                        // left-aligned <button>, NOT a Monaco quick-input widget.
+                        var items = Array.prototype.slice.call(
+                            document.querySelectorAll('button.select-none, button[class*="w-full"][class*="text-left"]')
+                        ).filter(function(b){{ return b.offsetParent !== null; }});
+                        var hit = null;
+                        for (var i = 0; i < items.length; i++) {{
+                            var t = ((items[i].innerText || '').split('\n')[0] || '').trim().toLowerCase();
+                            if (t.indexOf(target) !== -1) {{ hit = items[i]; break; }}
                         }}
-                    }}, 300);
-                    return 'selector_clicked';
-                }}
-                return 'no_selector';
+                        if (hit) {{ hit.click(); resolve('switched'); }}
+                        else {{
+                            document.body.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, key: 'Escape', code: 'Escape', keyCode: 27, which: 27 }}));
+                            resolve('model_not_found');
+                        }}
+                    }}, 700);
+                }});
             }})()
         "#);
 
         let result = self.evaluate_js(&js).await?;
-        eprintln!("🔄 Model switch to '{model_name}': {:?}", result);
-        Ok(())
+        let outcome = result.get("value").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+        eprintln!("🔄 Model switch to '{model_name}': {outcome}");
+        Ok(outcome)
     }
 
-    /// Execute a full autonomous task: inject prompt → wait → auto-accept
+    /// Execute a full autonomous task: inject prompt → wait (auto-allow approvals) → auto-accept
     pub async fn execute_task(&mut self, prompt: &str, timeout_secs: u64) -> Result<String> {
         eprintln!("🤖 Executing task: {}...", &prompt[..prompt.len().min(80)]);
 
         self.inject_prompt(prompt).await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
+        // While the model works it may surface permission dialogs; clear them.
+        let _ = self.auto_allow().await;
+
         let response = self.wait_for_response(timeout_secs).await?;
 
-        // Auto-accept any edits
+        // Clear any trailing approval, then accept edits.
+        let _ = self.auto_allow().await;
         let edits = self.auto_accept_edits().await.unwrap_or(0);
 
         eprintln!("✅ Task complete. Response: {} chars, {} edits accepted", response.len(), edits);
         Ok(response)
+    }
+
+    /// Autopilot: continuously poll for approval dialogs and (optionally) file
+    /// edits, auto-clicking them. Mirrors LazyGravity's polling detector.
+    /// Runs for `duration_secs`, polling every `interval_ms`.
+    pub async fn auto_pilot(&mut self, duration_secs: u64, interval_ms: u64, accept_edits: bool) -> Result<(u32, u32)> {
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(duration_secs);
+        let mut allows = 0u32;
+        let mut accepts = 0u32;
+        eprintln!("🛸 Autopilot started ({duration_secs}s, every {interval_ms}ms, accept_edits={accept_edits})");
+
+        while tokio::time::Instant::now() < deadline {
+            if self.auto_allow().await.unwrap_or(false) {
+                allows += 1;
+            }
+            if accept_edits {
+                accepts += self.auto_accept_edits().await.unwrap_or(0);
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
+        }
+
+        eprintln!("🛸 Autopilot done: {allows} approvals, {accepts} edits accepted");
+        Ok((allows, accepts))
     }
 }
 

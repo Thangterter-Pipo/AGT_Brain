@@ -94,16 +94,20 @@ def main():
         "- Answer in Vietnamese as the primary user language is Vietnamese."
     )
 
-    # LLM Synthesis: Try 9Router local gateway, then Grok VPS, then Grok localhost
+    # LLM Synthesis: Try 9Router local gateway
     summary = None
     
     # 1. Try 9Router Local (Fast & Highly Stable)
     print("💤 [Dreaming] Attempting synthesis using 9Router Local...")
     try:
-        ninerouter_url = "http://127.0.0.1:20128/v1/chat/completions"
+        # Load NINEROUTER_URL and KEY from env or defaults
+        ninerouter_base = os.environ.get("NINEROUTER_URL", "http://127.0.0.1:20128")
+        ninerouter_key = os.environ.get("NINEROUTER_KEY", "")
+        
+        ninerouter_url = f"{ninerouter_base}/v1/chat/completions"
         headers_9r = {
             "Content-Type": "application/json",
-            "Authorization": "Bearer sk-f7d8d77f96db61e1-gv5z1w-64ae04b4"
+            "Authorization": f"Bearer {ninerouter_key}"
         }
         payload_9r = {
             "model": "ag/gemini-3-flash",
@@ -118,47 +122,8 @@ def main():
         summary = resp.json()["choices"][0]["message"]["content"]
         print("✅ Synthesis completed via 9Router (ag/gemini-3-flash)")
     except Exception as e:
-        print(f"⚠️ 9Router Local failed: {e}")
-
-    # 2. Try Grok VPS (Fallback 1)
-    if not summary:
-        print("💤 [Dreaming] Attempting fallback to Grok VPS...")
-        grok_base = os.environ.get("GROK_API_BASE", "http://194.163.174.78:8000")
-        try:
-            payload_grok = {
-                "model": "grok-4.20-0309-non-reasoning",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Raw memories to compress:\n\n{text_to_compress}"}
-                ],
-                "stream": False
-            }
-            resp = httpx.post(f"{grok_base}/v1/chat/completions", json=payload_grok, headers={"Content-Type": "application/json"}, timeout=120.0)
-            resp.raise_for_status()
-            summary = resp.json()["choices"][0]["message"]["content"]
-            print("✅ Synthesis completed via Grok VPS")
-        except Exception as e:
-            print(f"⚠️ Grok VPS failed: {e}")
-
-    # 3. Try Grok Localhost (Fallback 2)
-    if not summary:
-        print("💤 [Dreaming] Attempting fallback to Grok Localhost...")
-        try:
-            payload_grok = {
-                "model": "grok-4.20-0309-non-reasoning",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Raw memories to compress:\n\n{text_to_compress}"}
-                ],
-                "stream": False
-            }
-            resp = httpx.post("http://127.0.0.1:8000/v1/chat/completions", json=payload_grok, headers={"Content-Type": "application/json"}, timeout=60.0)
-            resp.raise_for_status()
-            summary = resp.json()["choices"][0]["message"]["content"]
-            print("✅ Synthesis completed via Grok Localhost")
-        except Exception as e:
-            print(f"❌ All LLM backends failed. Last error: {e}")
-            sys.exit(1)
+        print(f"❌ LLM Backend failed: {e}")
+        sys.exit(1)
 
     print(f"💤 [Dreaming] Summary generated:\n{summary}\n")
 

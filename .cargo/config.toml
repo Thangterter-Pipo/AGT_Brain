@@ -1,0 +1,5 @@
+# Trỏ linker GNU tới MinGW portable (E:\AGT_Brain\.toolchain\mingw64\bin)
+# Dùng khi máy thiếu dlltool/gcc trong PATH hệ thống.
+[target.x86_64-pc-windows-gnu]
+linker = "E:\\AGT_Brain\\.toolchain\\mingw64\\bin\\gcc.exe"
+ar = "E:\\AGT_Brain\\.toolchain\\mingw64\\bin\\ar.exe"

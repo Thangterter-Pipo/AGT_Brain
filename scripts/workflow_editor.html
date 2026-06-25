@@ -15,8 +15,6 @@
             --accent: #7c6cf0;
             --accent-bright: #a78bfa;
             --accent-glow: rgba(124, 108, 240, 0.4);
-            --grok-color: #ef4444;
-            --grok-glow: rgba(239, 68, 68, 0.35);
             --chatgpt-color: #22c55e;
             --chatgpt-glow: rgba(34, 197, 94, 0.35);
             --antigravity-color: #3b82f6;
@@ -239,16 +237,14 @@
     <div class="legend" id="legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--boss-color)"></div>Bố (User)</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--antigravity-color)"></div>Antigravity</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--grok-color)"></div>Grok</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--chatgpt-color)"></div>ChatGPT</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--chatgpt-color)"></div>ChatGPT</div></div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--memory-color)"></div>Memory</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--tool-color)"></div>Tools</div>
     </div>
 
     <div class="health-bar" id="healthBar">
         <div class="health-pill"><div class="health-dot" id="h-supabase"></div>Supabase</div>
-        <div class="health-pill"><div class="health-dot" id="h-grok"></div>Grok API</div>
-        <div class="health-pill"><div class="health-dot" id="h-chatgpt"></div>ChatGPT API</div>
+        <div class="health-pill"><div class="health-dot" id="h-chatgpt"></div>ChatGPT API</div></div>
     </div>
 
     <div class="zoom-controls">
@@ -277,7 +273,6 @@
     // ============================================================
     let SUPABASE_URL = 'YOUR_SUPABASE_URL';
     let SUPABASE_KEY = 'YOUR_SUPABASE_KEY';
-    let GROK_URL = 'http://127.0.0.1:8000';
     const CHATGPT_URL = 'http://localhost:5005';
     let headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
 
@@ -292,7 +287,6 @@
                 SUPABASE_KEY = config.supabase_key;
                 headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
             }
-            if (config.grok_url) GROK_URL = config.grok_url;
             console.log('✅ Config loaded from supabase_config.json');
             refreshHealth();
         } catch (e) { console.warn('Config auto-load failed:', e.message); }
@@ -341,7 +335,6 @@
         // Main agents
         { id: 'boss', label: 'Bố', subtitle: 'User / Commander', x: 600, y: 80, w: 130, h: 60, color: '#f59e0b', glow: 'rgba(245,158,11,0.35)', icon: '👑', type: 'agent' },
         { id: 'antigravity', label: 'Antigravity', subtitle: 'THE BUILDER', x: 600, y: 240, w: 160, h: 65, color: '#3b82f6', glow: 'rgba(59,130,246,0.4)', icon: '🧠', type: 'agent' },
-        { id: 'grok', label: 'Grok', subtitle: 'RESEARCHER', x: 330, y: 420, w: 160, h: 65, color: '#ef4444', glow: 'rgba(239,68,68,0.35)', icon: '🔴', type: 'agent' },
         { id: 'chatgpt', label: 'ChatGPT', subtitle: 'REFINER (Polisher)', x: 870, y: 420, w: 160, h: 65, color: '#22c55e', glow: 'rgba(34,197,94,0.35)', icon: '🟢', type: 'agent' },
 
         // Memory
@@ -364,15 +357,12 @@
         // Boss → Antigravity
         { from: 'boss', to: 'antigravity', label: 'commands', color: '#f59e0b', animated: true },
         // Antigravity → Subagents
-        { from: 'antigravity', to: 'grok', label: 'research / think', color: '#ef4444', animated: true },
         { from: 'antigravity', to: 'chatgpt', label: 'code / verify', color: '#22c55e', animated: true },
         // Collab
-        { from: 'grok', to: 'collab', label: 'parallel', color: '#14b8a6', animated: true, dashed: true },
         { from: 'chatgpt', to: 'collab', label: 'relay', color: '#14b8a6', animated: true, dashed: true },
-        { from: 'collab', to: 'antigravity', label: 'merged result', color: '#14b8a6', animated: true },
+        { from: 'collab', to: 'antigravity', label: 'refinement', color: '#14b8a6', animated: true },
         // Memory
         { from: 'antigravity', to: 'supabase', label: 'save / recall', color: '#ec4899', animated: true },
-        { from: 'grok', to: 'supabase', label: 'auto-save', color: '#ec4899', animated: false },
         { from: 'chatgpt', to: 'supabase', label: 'auto-save', color: '#ec4899', animated: false },
         { from: 'supabase', to: 'local_mem', label: 'decisions', color: '#d946ef', animated: false },
         { from: 'supabase', to: 'skills', label: 'skills', color: '#a855f7', animated: false },
@@ -389,13 +379,12 @@
     const NODE_INFO = {
         boss: { title: '👑 Bố (User)', body: `<div class="stat-row"><span class="stat-label">Role</span><span class="stat-value">Commander</span></div><div class="stat-row"><span class="stat-label">Controls</span><span class="stat-value">All 3 AIs</span></div><div class="stat-row"><span class="stat-label">Platform</span><span class="stat-value">Antigravity IDE</span></div>` },
         antigravity: { title: '🧠 Antigravity', body: `<div class="stat-row"><span class="stat-label">Role</span><span class="stat-value">THE BUILDER</span></div><div class="stat-row"><span class="stat-label">Tools</span><span class="stat-value">19 + CDP</span></div><div class="stat-row"><span class="stat-label">MCP</span><span class="stat-value">13 tools</span></div><div class="stat-row"><span class="stat-label">CLIs</span><span class="stat-value">4 binaries</span></div>` },
-        grok: { title: '🔴 Grok', body: `<div class="stat-row"><span class="stat-label">Endpoint</span><span class="stat-value">:8000</span></div><div class="stat-row"><span class="stat-label">Models</span><span class="stat-value">grok-3/4</span></div><div class="stat-row"><span class="stat-label">Modes</span><span class="stat-value">research, think, review, brainstorm</span></div>` },
         chatgpt: { title: '🟢 ChatGPT (Refiner)', body: `<div class="stat-row"><span class="stat-label">Endpoint</span><span class="stat-value">:5005</span></div><div class="stat-row"><span class="stat-label">Models</span><span class="stat-value">gpt-4o, o3-mini</span></div><div class="stat-row"><span class="stat-label">Modes</span><span class="stat-value">code, creative, second_opinion</span></div>` },
         supabase: { title: '💾 Supabase Cloud', body: `<div class="stat-row"><span class="stat-label">Region</span><span class="stat-value">ap-southeast-1</span></div><div class="stat-row"><span class="stat-label">Records</span><span class="stat-value" id="info-mem-count">Loading...</span></div><div class="stat-row"><span class="stat-label">Schema</span><span class="stat-value">10 cols + pgvector</span></div><div class="stat-row"><span class="stat-label">Search</span><span class="stat-value">Semantic (embedding)</span></div>` },
         local_mem: { title: '📁 Local Memory', body: `<div class="stat-row"><span class="stat-label">Decisions</span><span class="stat-value">13 entries</span></div><div class="stat-row"><span class="stat-label">Incidents</span><span class="stat-value">1 entry</span></div><div class="stat-row"><span class="stat-label">Policy</span><span class="stat-value">Append-only, NEVER delete</span></div>` },
         skills: { title: '📚 Skill Library', body: `<div class="stat-row"><span class="stat-label">Purpose</span><span class="stat-value">Reusable patterns</span></div><div class="stat-row"><span class="stat-label">Save</span><span class="stat-value">save_skill MCP</span></div><div class="stat-row"><span class="stat-label">Search</span><span class="stat-value">recall_skills MCP</span></div>` },
         mcp: { title: '🔌 MCP Server', body: `<div class="stat-row"><span class="stat-label">Framework</span><span class="stat-value">rmcp (stdio)</span></div><div class="stat-row"><span class="stat-label">Tools</span><span class="stat-value">13 exposed</span></div><div class="stat-row"><span class="stat-label">Auto</span><span class="stat-value">auto_context first!</span></div>` },
-        collab: { title: '🤝 2-Agent Collaboration', body: `<div class="stat-row"><span class="stat-label">Parallel</span><span class="stat-value">Grok + GPT → merge</span></div><div class="stat-row"><span class="stat-label">Relay</span><span class="stat-value">Grok → GPT refine</span></div><div class="stat-row"><span class="stat-label">Debate</span><span class="stat-value">2-5 rounds adversarial</span></div>` },
+        collab: { title: '🤝 Multi-Agent Collaboration', body: `<div class="stat-row"><span class="stat-label">Parallel</span><span class="stat-value">Subagents → merge</span></div><div class="stat-row"><span class="stat-label">Relay</span><span class="stat-value">Research → refine</span></div><div class="stat-row"><span class="stat-label">Debate</span><span class="stat-value">2-5 rounds adversarial</span></div>` },
         cdp: { title: '🤖 CDP Controller', body: `<div class="stat-row"><span class="stat-label">Port</span><span class="stat-value">9333</span></div><div class="stat-row"><span class="stat-label">Protocol</span><span class="stat-value">Chrome DevTools</span></div><div class="stat-row"><span class="stat-label">Capabilities</span><span class="stat-value">Inject, Monitor, Switch</span></div>` },
         cron: { title: '⏰ brain-cron', body: `<div class="stat-row"><span class="stat-label">Modes</span><span class="stat-value">one-shot, daemon</span></div><div class="stat-row"><span class="stat-label">Interval</span><span class="stat-value">12h default</span></div><div class="stat-row"><span class="stat-label">Output</span><span class="stat-value">Daily reflection</span></div>` },
         dashboard: { title: '📊 Admin Dashboard', body: `<div class="stat-row"><span class="stat-label">File</span><span class="stat-value">dashboard.html</span></div><div class="stat-row"><span class="stat-label">Features</span><span class="stat-value">Memory browser, Stats, Health</span></div>` },
@@ -741,7 +730,6 @@
             el.className = `health-dot ${ok ? 'ok' : 'fail'}`;
         };
         try { const r = await fetch(`${SUPABASE_URL}/rest/v1/memories?select=id&limit=1`, { headers }); set('h-supabase', r.ok); } catch { set('h-supabase', false); }
-        try { const r = await fetch(`${GROK_URL}/v1/models`); set('h-grok', r.ok); } catch { set('h-grok', false); }
         try { const r = await fetch(`${CHATGPT_URL}/v1/models`); set('h-chatgpt', r.ok); } catch { set('h-chatgpt', false); }
     }
 

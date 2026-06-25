@@ -1,0 +1,94 @@
+/* core/theme.css — Design tokens + layout shell. Đổi theme = sửa biến :root. */
+:root {
+  --bg: #0a0e14;
+  --surface: #141a23;
+  --surface-2: #1c242f;
+  --border: #2a3440;
+  --text: #e6edf3;
+  --text-dim: #8b98a5;
+  --accent: #38bdf8;
+  --accent-dim: #0e7490;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --err: #f85149;
+  --gray: #6e7681;
+  --radius: 12px;
+  --gap: 16px;
+  --sidebar-w: 220px;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  font-size: 14px;
+  display: flex;
+}
+
+/* Sidebar */
+#sidebar {
+  width: var(--sidebar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+#sidebar .brand {
+  padding: 18px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+#sidebar .nav { padding: 8px; overflow-y: auto; flex: 1; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  color: var(--text-dim); cursor: pointer;
+  user-select: none; font-weight: 500;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--text); }
+.nav-item.active { background: var(--accent-dim); color: #fff; }
+.nav-item .ico { font-size: 16px; width: 20px; text-align: center; }
+
+/* Main */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#topbar {
+  height: 52px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 12px;
+  background: var(--surface);
+}
+#topbar .title { font-size: 15px; font-weight: 600; }
+#topbar .spacer { flex: 1; }
+#panel-root { flex: 1; overflow-y: auto; padding: 20px; }
+
+/* Reusable bits panel dùng chung */
+.grid { display: grid; gap: var(--gap); }
+.grid-3 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+}
+.card:hover { border-color: var(--accent-dim); }
+.row { display: flex; align-items: center; gap: 12px; }
+.badge {
+  font-size: 12px; padding: 3px 10px; border-radius: 999px;
+  font-weight: 600; white-space: nowrap;
+}
+.badge.ok { background: rgba(63,185,80,.15); color: var(--ok); }
+.badge.warn { background: rgba(210,153,34,.15); color: var(--warn); }
+.badge.err { background: rgba(248,81,73,.15); color: var(--err); }
+.badge.gray { background: rgba(110,118,129,.15); color: var(--gray); }
+.btn {
+  background: var(--accent-dim); color: #fff; border: none;
+  padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600;
+}
+.btn:hover { background: var(--accent); }
+.btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+.muted { color: var(--text-dim); }
+.mono { font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; }

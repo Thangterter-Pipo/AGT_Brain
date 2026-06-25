@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {
+      "id": "code-fn",
+      "prompt": "Viết hàm cộng 2 số trong Rust. Chỉ code.",
+      "role": "Coder",
+      "depends_on": []
+    },
+    {
+      "id": "test-fn",
+      "prompt": "Viết 1 test case cho hàm cộng 2 số. Chỉ code.",
+      "role": "Tester",
+      "depends_on": []
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 //! agt-mcp — MCP Server exposing Antigravity memory tools to IDE.
-//! 8 tools for 2-AI team (Antigravity + Grok).
+//! 12 tools for Antigravity AI brain.
 
 use rmcp::ServerHandler;
 use rmcp::ServiceExt;
@@ -116,9 +116,9 @@ impl AgentMcp {
         }
     }
 
-    /// Lấy ký ức gần đây từ toàn bộ team (2 AI: Antigravity, Grok).
+    /// Lấy ký ức gần đây có độ quan trọng cao.
     /// Chỉ lấy memories có importance >= 3.
-    #[tool(description = "Get recent high-importance team memories from all agents (Antigravity, Grok). Used for shared context.")]
+    #[tool(description = "Get recent high-importance memories. Used for context.")]
     async fn team_memory(&self, #[tool(param)] limit: Option<u64>) -> String {
         let limit = limit.unwrap_or(5) as usize;
         let config = get_config_path();

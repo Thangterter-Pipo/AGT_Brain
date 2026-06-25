@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/synapz-memory", "crates/synapz-tools", "crates/synapz-mcp"]
+members = ["crates/synapz-memory", "crates/synapz-tools", "crates/synapz-mcp", "crates/synapz-orchestrator"]
 resolver = "2"
 
 [workspace.dependencies]

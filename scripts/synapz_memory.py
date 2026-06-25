@@ -22,11 +22,12 @@ DB_PATH = os.path.join(BASE_DIR, "memory", "graph_memory.db")
 DECISIONS_DIR = os.path.join(BASE_DIR, "memory", "decisions")
 INCIDENTS_DIR = os.path.join(BASE_DIR, "memory", "incidents")
 
-# 9Router configuration
-NINEROUTER_URL = "http://127.0.0.1:20128/v1/chat/completions"
-NINEROUTER_EMB_URL = "http://127.0.0.1:20128/v1/embeddings"
-NINEROUTER_KEY = "sk-f7d8d77f96db61e1-gv5z1w-64ae04b4"
-DEFAULT_MODEL = "ag/gemini-3-flash"
+# 9Router configuration (env-first; fallback giữ tương thích nếu chưa set env)
+NINEROUTER_BASE = os.environ.get("NINEROUTER_URL", "http://127.0.0.1:20128")
+NINEROUTER_URL = f"{NINEROUTER_BASE}/v1/chat/completions"
+NINEROUTER_EMB_URL = f"{NINEROUTER_BASE}/v1/embeddings"
+NINEROUTER_KEY = os.environ.get("NINEROUTER_KEY", "")
+DEFAULT_MODEL = os.environ.get("NINEROUTER_MODEL", "ag/gemini-3-flash")
 
 # =====================================================================
 # Database & Core Helpers

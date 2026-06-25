@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import socket
+import subprocess
 import urllib.parse
 import urllib.request
 import base64
@@ -18,9 +19,133 @@ from socketserver import ThreadingMixIn
 
 PORT = 8899
 
+# ---- Load .env (simple, no external dep) so secrets stay out of code ----
+def _load_dotenv():
+    """Load KEY=VALUE lines from .env at repo root into os.environ (no override)."""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        env_path = os.path.join(os.path.dirname(here), ".env")
+        if not os.path.isfile(env_path):
+            return
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k, v = k.strip(), v.strip()
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception as e:
+        print(f"⚠️ .env load skipped: {e}")
+
+_load_dotenv()
+
+# ---- API auth token (protects the public-tunnel-exposed HTTP API) ----
+# If SYNAPZ_API_TOKEN is set, every NON-localhost request must present it via
+# header `X-Synapz-Token` or `?token=`. Localhost (Bố dùng dashboard local) is
+# always allowed so nothing breaks on the machine itself. Empty token => auth OFF.
+API_TOKEN = os.environ.get("SYNAPZ_API_TOKEN", "").strip()
+# Paths always reachable without a token (so the login/landing page can load).
+_AUTH_EXEMPT_PREFIXES = ("/scripts/miniapp.html", "/scripts/dashboard.html",
+                          "/scripts/", "/favicon")
+
 # Multi-AI Coordination
 from coordination import Coordinator
 COORD = None  # initialized in main() after chdir
+
+# ---- Attachment persistence (images survive history re-render, like the IDE) ----
+# Uploaded images are NOT in the IDE transcript, so we persist them ourselves and
+# map each batch to the prompt it was sent with. On history rebuild we re-attach.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ATTACH_DIR = os.path.join(_SCRIPT_DIR, ".attachments")
+ATTACH_LOG = os.path.join(ATTACH_DIR, "attachments_log.json")
+_pending_attachments = []          # abs paths saved by /upload, awaiting next /chat
+_attach_lock = threading.Lock()
+
+def _load_attach_log():
+    try:
+        with open(ATTACH_LOG, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _save_attach_log(entries):
+    try:
+        os.makedirs(ATTACH_DIR, exist_ok=True)
+        tmp = ATTACH_LOG + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(entries, f, ensure_ascii=False)
+        os.replace(tmp, ATTACH_LOG)
+    except Exception as e:
+        print(f"Error saving attach log: {e}")
+
+def commit_pending_attachments(prompt):
+    """Bind images uploaded just before this prompt to the prompt text."""
+    global _pending_attachments
+    with _attach_lock:
+        if not _pending_attachments:
+            return
+        entries = _load_attach_log()
+        entries.append({
+            "prompt": (prompt or "").strip(),
+            "ts": time.time(),
+            "images": list(_pending_attachments),
+        })
+        # keep last 200 entries
+        if len(entries) > 200:
+            entries = entries[-200:]
+        _save_attach_log(entries)
+        _pending_attachments = []
+
+def extract_user_request(content):
+    """Pull the user's actual text out of the <USER_REQUEST>...</USER_REQUEST> wrapper."""
+    if not content:
+        return ""
+    s = content
+    start = s.find("<USER_REQUEST>")
+    end = s.find("</USER_REQUEST>")
+    if start != -1 and end != -1:
+        return s[start + len("<USER_REQUEST>"):end].strip()
+    return s.strip()
+
+
+# ---- Project file listing (for @-mention autocomplete) ----
+_files_cache = {"ts": 0, "files": []}
+_files_lock = threading.Lock()
+_SKIP_DIRS = {".git", "node_modules", "mingw", "__pycache__", ".attachments",
+              ".upload_cache", "target", "dist", "build", ".venv", "venv",
+              ".idea", ".vscode", "site-packages"}
+_SKIP_EXT = {".pyc", ".pyo", ".o", ".obj", ".exe", ".dll", ".bin", ".lock",
+             ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf",
+             ".zip", ".gz", ".7z", ".mp4", ".webm", ".woff", ".woff2", ".ttf"}
+
+def _list_project_files():
+    """Relative project file paths, cached for 60s. Skips junk/binary."""
+    with _files_lock:
+        now = time.time()
+        if now - _files_cache["ts"] < 60 and _files_cache["files"]:
+            return _files_cache["files"]
+        root = os.getcwd()
+        out = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".")]
+            for fn in filenames:
+                ext = os.path.splitext(fn)[1].lower()
+                if ext in _SKIP_EXT:
+                    continue
+                rel = os.path.relpath(os.path.join(dirpath, fn), root).replace("\\", "/")
+                out.append(rel)
+                if len(out) >= 4000:
+                    break
+            if len(out) >= 4000:
+                break
+        out.sort()
+        _files_cache["ts"] = now
+        _files_cache["files"] = out
+        return out
+
+
 
 # Discover the conversation ID logs path
 def find_latest_transcript_path():
@@ -46,6 +171,8 @@ def get_conversation_history(limit=40):
     path = find_latest_transcript_path()
     if not path:
         return []
+    attach_log = _load_attach_log()          # [{prompt, ts, images:[abs...]}]
+    used_attach = set()                       # indices already bound to a message
     messages = []
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -59,31 +186,42 @@ def get_conversation_history(limit=40):
                         content = (data.get("content", "") or "").strip()
                         if not content:
                             continue
+                        # Re-attach any images that were uploaded with this prompt.
+                        # Match by the user's actual request text (wrapper stripped).
+                        req_text = extract_user_request(content)
+                        imgs = []
+                        for ai, ent in enumerate(attach_log):
+                            if ai in used_attach:
+                                continue
+                            if ent.get("prompt") and ent["prompt"] == req_text:
+                                imgs = [p for p in ent.get("images", []) if os.path.isfile(p)]
+                                used_attach.add(ai)
+                                break
                         messages.append({
                             "role": "user",
                             "content": content,
-                            "step_index": step_idx
+                            "step_index": step_idx,
+                            "images": imgs,
                         })
-                    # Parse agent response
-                    elif data.get("source") == "MODEL" or data.get("type") in ("PLANNER_RESPONSE", "MODEL_RESPONSE"):
+                    # Parse agent response — ONLY the planner's natural-language
+                    # prose, exactly like the IDE. Every other MODEL-sourced entry
+                    # (RUN_COMMAND, CODE_ACTION, LIST_DIRECTORY, VIEW_FILE,
+                    # GREP_SEARCH, GENERATE_IMAGE, GENERIC, ...) is a tool step and
+                    # is hidden.
+                    elif data.get("type") in ("PLANNER_RESPONSE", "MODEL_RESPONSE"):
                         content = data.get("content", "") or ""
-                        
-                        # Formatting tool calls
-                        tool_calls = data.get("tool_calls", [])
-                        tool_desc = ""
-                        if tool_calls:
-                            tool_desc = "\n🔧 *Tool Calls:*\n" + "\n".join(
-                                f"- {t.get('name')} ({json.dumps(t.get('arguments', {}))})"
-                                for t in tool_calls
-                            )
-                        
-                        full = (content + tool_desc).strip()
+
+                        # Hide tool calls entirely, just like the IDE does:
+                        # only the model's natural-language text is shown. Steps
+                        # that are pure tool invocations (no prose) are skipped.
+                        full = content.strip()
                         if not full:
                             continue
                         messages.append({
                             "role": "assistant",
                             "content": full,
-                            "step_index": step_idx
+                            "step_index": step_idx,
+                            "images": [],
                         })
                 except Exception:
                     pass
@@ -116,6 +254,164 @@ def discover_ws_url():
     except Exception as e:
         print(f"Error discovering WS url: {e}")
     return None
+
+# ---- Launch Antigravity IDE with CDP enabled (port 9333) from SynapzCore ----
+ANTIGRAVITY_EXE = os.path.join(
+    os.environ.get("LOCALAPPDATA", r"C:\Users\thang\AppData\Local"),
+    "Programs", "Antigravity IDE", "Antigravity IDE.exe"
+)
+CDP_PORT = 9333
+_launch_lock = threading.Lock()
+
+# Đường dẫn binary orchestrator (release ưu tiên, fallback debug).
+def _orchestrator_bin():
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)
+    for sub in ("release", "debug"):
+        p = os.path.join(root, "target", sub, "synapz-orchestrator.exe")
+        if os.path.isfile(p):
+            return p
+    return None
+
+def run_orchestrator_dispatch(prompt, timeout=200):
+    """Gọi synapz-orchestrator --live --json giao task cho mọi agent Connected.
+
+    Trả dict JSON đã parse từ orchestrator: {ok, prompt, agents, completed, failed, results:[...]}.
+    """
+    binp = _orchestrator_bin()
+    if not binp:
+        return {"ok": False, "reason": "Chưa build synapz-orchestrator (cargo build --release)"}
+    env = dict(os.environ)
+    env["PYTHONHOME"] = ""
+    env["PYTHONPATH"] = ""
+    try:
+        proc = subprocess.run(
+            [binp, "--json", "--live", prompt],
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            capture_output=True, text=True, timeout=timeout, env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "reason": f"orchestrator timeout {timeout}s"}
+    # JSON nằm ở dòng cuối stdout (các dòng trước có thể là log mcp).
+    out = (proc.stdout or "").strip()
+    for line in reversed(out.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except Exception:
+                continue
+    return {"ok": False, "reason": "không parse được JSON từ orchestrator", "raw": out[-500:], "stderr": (proc.stderr or "")[-300:]}
+
+def run_orchestrator_pipeline(graph, echo=True, timeout=600):
+    """Chạy TRỌN 4 giai đoạn parallel orchestration qua synapz-orchestrator --pipeline.
+
+    `graph` là dict TaskGraph ({"nodes":[{id,prompt,role,depends_on}...]}).
+    Ghi ra file tạm, chạy binary, rồi đọc data/last_pipeline_run.json (binary tự ghi).
+    Trả dict: {ok, report:{...}, layers:[...]} hoặc {ok:False, reason}.
+    """
+    binp = _orchestrator_bin()
+    if not binp:
+        return {"ok": False, "reason": "Chưa build synapz-orchestrator (cargo build --release)"}
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Ghi graph ra file tạm trong data/.
+    data_dir = os.path.join(root, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    graph_path = os.path.join(data_dir, "pipeline_input.json")
+    try:
+        with open(graph_path, "w", encoding="utf-8") as f:
+            json.dump(graph, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return {"ok": False, "reason": f"không ghi được graph tạm: {e}"}
+
+    env = dict(os.environ)
+    env["PYTHONHOME"] = ""
+    env["PYTHONPATH"] = ""
+    args = [binp, "--pipeline", graph_path]
+    if echo:
+        args.append("--echo")
+    try:
+        proc = subprocess.run(
+            args, cwd=root, capture_output=True, text=True, timeout=timeout, env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "reason": f"pipeline timeout {timeout}s"}
+
+    # Binary ghi kết quả vào data/last_pipeline_run.json.
+    run_path = os.path.join(data_dir, "last_pipeline_run.json")
+    buf_path = os.path.join(data_dir, "last_buffer_snapshot.json")
+    report = None
+    buffer_snap = None
+    try:
+        if os.path.isfile(run_path):
+            with open(run_path, "r", encoding="utf-8") as f:
+                report = json.load(f)
+        if os.path.isfile(buf_path):
+            with open(buf_path, "r", encoding="utf-8") as f:
+                buffer_snap = json.load(f)
+    except Exception as e:
+        return {"ok": False, "reason": f"không đọc được kết quả pipeline: {e}",
+                "stdout": (proc.stdout or "")[-500:]}
+
+    if report is None:
+        return {"ok": False, "reason": "pipeline không sinh kết quả",
+                "stdout": (proc.stdout or "")[-800:], "stderr": (proc.stderr or "")[-300:]}
+    return {"ok": True, "report": report, "buffer": buffer_snap,
+            "stdout_tail": (proc.stdout or "")[-1200:]}
+
+def launch_antigravity_cdp(force_restart=False, wait_timeout=40):
+    """Start Antigravity IDE with --remote-debugging-port=9333.
+
+    If CDP is already responsive and force_restart is False, do nothing.
+    When force_restart is True, kill any running instance first (so the
+    debug port is actually enabled — a normally-launched IDE has no CDP).
+    Polls until discover_ws_url() succeeds or wait_timeout elapses.
+    Returns dict {ok, ws_url|reason, restarted, launched}.
+    """
+    with _launch_lock:
+        already = discover_ws_url()
+        if already and not force_restart:
+            return {"ok": True, "ws_url": already, "restarted": False,
+                    "launched": False, "note": "CDP already up"}
+
+        if not os.path.isfile(ANTIGRAVITY_EXE):
+            return {"ok": False, "reason": f"Antigravity exe not found: {ANTIGRAVITY_EXE}"}
+
+        restarted = False
+        if force_restart or not already:
+            # Kill existing instances so the debug port can be (re)bound.
+            # A normally-started IDE won't expose CDP, so a restart is required.
+            for name in ("Antigravity IDE.exe", "Antigravity.exe"):
+                try:
+                    subprocess.run(["taskkill", "/F", "/IM", name],
+                                   capture_output=True, timeout=10)
+                    restarted = True
+                except Exception as e:
+                    print(f"taskkill {name}: {e}")
+            time.sleep(3)
+
+        try:
+            # DETACHED so the IDE outlives this request; no console window.
+            CREATE_NO_WINDOW = 0x08000000
+            DETACHED_PROCESS = 0x00000008
+            subprocess.Popen(
+                [ANTIGRAVITY_EXE, f"--remote-debugging-port={CDP_PORT}"],
+                creationflags=CREATE_NO_WINDOW | DETACHED_PROCESS,
+                close_fds=True,
+            )
+        except Exception as e:
+            return {"ok": False, "reason": f"launch failed: {e}", "restarted": restarted}
+
+        # Poll until the workbench page exposes a WS debugger URL.
+        deadline = time.time() + wait_timeout
+        while time.time() < deadline:
+            time.sleep(2)
+            ws = discover_ws_url()
+            if ws:
+                return {"ok": True, "ws_url": ws, "restarted": restarted, "launched": True}
+        return {"ok": False, "reason": f"IDE launched but CDP not up within {wait_timeout}s",
+                "restarted": restarted, "launched": True}
+
 
 def inject_prompt_via_cdp(ws_url, prompt):
     parsed = urllib.parse.urlparse(ws_url)
@@ -424,16 +720,23 @@ JS_OPEN_AND_LIST = r"""
     var current = label.replace('Select model, current:','').trim();
     btn.click();
     setTimeout(function(){
-      var items = document.querySelectorAll('[role="menuitem"],[role="option"]');
+      // Antigravity model picker = Tailwind popup of full-width left-aligned <button>,
+      // NOT a Monaco quick-input widget. Each model is its own selectable button.
+      var items = Array.prototype.slice.call(
+        document.querySelectorAll('button.select-none, button[class*="w-full"][class*="text-left"]')
+      ).filter(function(b){ return b.offsetParent !== null; });
+      var rx = /claude|gemini|gpt|opus|sonnet|flash|o3|o1|deepseek|grok/i;
       var models = [];
       for(var i=0;i<items.length;i++){
-        var t=(items[i].innerText||'').trim();
-        if(t && t.length<60 && models.indexOf(t)===-1) models.push(t);
+        // first text line = model name (drop trailing "Fast"/tier hint lines)
+        var raw=(items[i].innerText||'').trim();
+        var t=raw.split('\n')[0].trim();
+        if(t && rx.test(t) && t.length<60 && models.indexOf(t)===-1) models.push(t);
       }
-      // close the menu
+      // close the popup
       document.body.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'Escape',code:'Escape',keyCode:27,which:27}));
       resolve(JSON.stringify({current: current, models: models}));
-    }, 350);
+    }, 700);
   });
 })()
 """
@@ -448,18 +751,21 @@ def js_switch_model(model_name):
     if(!btn){ resolve('no_model_button'); return; }
     btn.click();
     setTimeout(function(){
-      var items = document.querySelectorAll('[role="menuitem"],[role="option"]');
+      var items = Array.prototype.slice.call(
+        document.querySelectorAll('button.select-none, button[class*="w-full"][class*="text-left"]')
+      ).filter(function(b){ return b.offsetParent !== null; });
+      var tl = target.toLowerCase();
       var hit = null;
       for(var i=0;i<items.length;i++){
-        var t=(items[i].innerText||'').trim().toLowerCase();
-        if(t.indexOf(target.toLowerCase())!==-1){ hit=items[i]; break; }
+        var t=((items[i].innerText||'').split('\n')[0]||'').trim().toLowerCase();
+        if(t.indexOf(tl)!==-1){ hit=items[i]; break; }
       }
       if(hit){ hit.click(); resolve('switched'); }
       else {
         document.body.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'Escape',code:'Escape',keyCode:27,which:27}));
         resolve('model_not_found');
       }
-    }, 350);
+    }, 700);
   });
 })()
 """
@@ -484,6 +790,132 @@ JS_CLEAR = r"""
 })()
 """
 
+# Auto-allow: locate an Allow button, verify a matching Deny exists in the same
+# container (guard against false-positives), then click Allow. Prefers "Allow once".
+JS_AUTO_ALLOW = r"""
+(function() {
+    var ALLOW_ONCE = ['allow once', 'allow one time', '今回のみ許可', '1回のみ許可'];
+    var ALWAYS_ALLOW = ['allow this conversation', 'allow this chat', 'always allow', '常に許可'];
+    var ALLOW = ['allow', 'permit', 'accept', 'run command', '許可', '承認'];
+    var DENY = ['deny', 'reject', 'decline', 'cancel', '拒否'];
+    var norm = function(s){ return (s||'').toLowerCase().replace(/\s+/g,' ').trim(); };
+    var all = Array.prototype.slice.call(document.querySelectorAll('button'))
+        .filter(function(b){ return b.offsetParent !== null; });
+    var approve = all.find(function(b){
+        var t = norm(b.textContent);
+        return ALLOW_ONCE.some(function(p){ return t.indexOf(p) !== -1; });
+    });
+    if (!approve) {
+        approve = all.find(function(b){
+            var t = norm(b.textContent);
+            var isAlways = ALWAYS_ALLOW.some(function(p){ return t.indexOf(p) !== -1; });
+            return !isAlways && ALLOW.some(function(p){ return t.indexOf(p) !== -1; });
+        });
+    }
+    if (!approve) return 'no_approval';
+    var container = approve.closest('[role="dialog"], .modal, .dialog, .monaco-dialog-box')
+        || (approve.parentElement && approve.parentElement.parentElement)
+        || approve.parentElement || document.body;
+    var cbtns = Array.prototype.slice.call(container.querySelectorAll('button'))
+        .filter(function(b){ return b.offsetParent !== null; });
+    var deny = cbtns.find(function(b){
+        var t = norm(b.textContent);
+        return DENY.some(function(p){ return t.indexOf(p) !== -1; });
+    });
+    if (!deny) return 'no_deny_guard';
+    approve.click();
+    return 'allowed';
+})()
+"""
+
+# Auto-accept edits: prefer Composer "Accept all" span, fall back to accept/apply buttons.
+JS_AUTO_ACCEPT = r"""
+(function() {
+    var accepted = 0;
+    var spans = document.querySelectorAll('span, button');
+    for (var i = 0; i < spans.length; i++) {
+        var t = (spans[i].innerText || '').trim().toLowerCase();
+        if (t === 'accept all') { spans[i].click(); return 1; }
+    }
+    var btns = document.querySelectorAll('button');
+    for (var j = 0; j < btns.length; j++) {
+        var text = (btns[j].innerText || '').toLowerCase();
+        var label = (btns[j].getAttribute('aria-label') || '').toLowerCase();
+        if (text.includes('accept') || text.includes('apply') ||
+            label.includes('accept') || label.includes('apply')) {
+            btns[j].click(); accepted++;
+        }
+    }
+    return accepted;
+})()
+"""
+
+# Read an interactive multiple-choice prompt (radiogroup + Submit) if present.
+JS_READ_OPTIONS = r"""
+(function() {
+    var rg = document.querySelector('[role="radiogroup"]');
+    var radios = Array.prototype.slice.call(document.querySelectorAll('input[type="radio"]'))
+        .filter(function(r){ return r.offsetParent !== null; });
+    if (!rg && radios.length === 0) return JSON.stringify({ has_options: false });
+
+    var clean = function(s){
+        return (s||'').replace(/\s+/g,' ').trim();
+    };
+    var options = radios.map(function(r, i){
+        // climb to the smallest enclosing element with sensible text,
+        // but stop before we swallow sibling options (cap length).
+        var txt = '', node = r;
+        for (var d = 0; d < 4 && node; d++) {
+            var t = clean(node.textContent);
+            if (t.length > 1 && t.length < 80) { txt = t; break; }
+            node = node.parentElement;
+        }
+        // strip a leading enumerator like "1", "2)" that the UI prepends
+        txt = txt.replace(/^(\d+)[\).:]?\s*/, '');
+        // a free-text "other" radio has no own label -> mark it clearly
+        if (!txt || txt.length >= 80) txt = '';
+        return { idx: i, text: txt, checked: !!r.checked };
+    });
+    var submit = Array.prototype.slice.call(document.querySelectorAll('button'))
+        .find(function(b){ return /submit/i.test(b.textContent||'') && b.offsetParent !== null; });
+    return JSON.stringify({
+        has_options: true,
+        options: options,
+        submit_disabled: submit ? !!submit.disabled : null,
+        submit_found: !!submit
+    });
+})()
+"""
+
+def js_select_option(index, submit=True):
+    """Click the radio option at `index`, then optionally click Submit."""
+    return r"""
+(function() {
+  return new Promise(function(resolve){
+    var radios = Array.prototype.slice.call(document.querySelectorAll('input[type="radio"]'))
+        .filter(function(r){ return r.offsetParent !== null; });
+    var idx = """ + str(int(index)) + r""";
+    if (idx < 0 || idx >= radios.length) { resolve('bad_index'); return; }
+    var r = radios[idx];
+    // click the label/row so the IDE's React state updates, not just the input
+    var row = r.closest('label') || r.parentElement || r;
+    row.click();
+    r.checked = true;
+    r.dispatchEvent(new Event('change', { bubbles: true }));
+    r.dispatchEvent(new Event('input', { bubbles: true }));
+    var doSubmit = """ + ("true" if submit else "false") + r""";
+    if (!doSubmit) { resolve('selected'); return; }
+    setTimeout(function(){
+      var btn = Array.prototype.slice.call(document.querySelectorAll('button'))
+          .find(function(b){ return /submit/i.test(b.textContent||'') && b.offsetParent !== null; });
+      if (!btn) { resolve('selected_no_submit'); return; }
+      if (btn.disabled) { resolve('submit_disabled'); return; }
+      btn.click();
+      resolve('submitted');
+    }, 250);
+  });
+})()
+"""
 
 def attach_images_via_cdp(file_paths):
     """Set image files into the IDE hidden file input via CDP DOM domain."""
@@ -530,6 +962,145 @@ def _sse_broadcast(event: str, data: dict):
 # Monkey-patch Coordinator to emit SSE on every state change
 _original_write = None
 
+def _pid_alive(pid):
+    """True if a process with this PID is currently running (Windows tasklist)."""
+    try:
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/NH"],
+            capture_output=True, text=True, timeout=5
+        ).stdout
+        return str(int(pid)) in out
+    except Exception:
+        return None  # unknown -> caller falls back to heartbeat timeout
+
+# Map agent_id -> liveness probe. Returns True/False (definitive) or None (unknown).
+# This lets the server decide "live" from a REAL signal at view time, instead of
+# requiring each agent to ping a heartbeat on a timer (webhook-style / pull model).
+def _probe_pipo_hermes():
+    """Pipo is live if its Hermes gateway process (gateway.pid) is running."""
+    try:
+        import json as _json
+        pid_file = r"C:\Users\thang\AppData\Local\hermes\gateway.pid"
+        if not os.path.isfile(pid_file):
+            return None
+        with open(pid_file, "r", encoding="utf-8") as f:
+            pid = _json.load(f).get("pid")
+        return _pid_alive(pid) if pid else None
+    except Exception:
+        return None
+
+def _probe_antigravity_ide():
+    """The IDE agent is live if CDP debug port 9333 answers."""
+    return bool(discover_ws_url())
+
+_AGENT_PROBES = {
+    "antigravity-ide": _probe_antigravity_ide,
+    "pipo-hermes": _probe_pipo_hermes,
+}
+
+def _apply_live_probes(agents):
+    """Override the heartbeat-based `stale` flag with a real liveness probe
+    for agents we know how to check. Agents without a probe keep the
+    heartbeat-timeout result. Mutates and returns the dict."""
+    for aid, info in agents.items():
+        probe = _AGENT_PROBES.get(aid)
+        if not probe:
+            continue
+        try:
+            live = probe()
+        except Exception:
+            live = None
+        if live is None:
+            continue  # probe inconclusive -> trust heartbeat timeout
+        info["stale"] = not live
+        info["status"] = "active" if live else info.get("status", "offline")
+        info["probed"] = True
+    return agents
+
+
+# ── Catalog of AI agents installed on THIS machine ──────────────
+# Each entry: how to detect it (a CLI on PATH, or a known exe path) + the
+# coordination agent_id it maps to + a default role + icon. The Agents tab
+# lists these so Bố can toggle any of them into/out of the constellation.
+_LOCALAPPDATA = os.environ.get("LOCALAPPDATA", r"C:\Users\thang\AppData\Local")
+_APPDATA = os.environ.get("APPDATA", r"C:\Users\thang\AppData\Roaming")
+
+_AGENT_CATALOG = [
+    {"agent_id": "claude-code", "label": "Claude Code", "role": "builder",
+     "icon": "🟠", "kind": "cli", "cmd": "claude"},
+    {"agent_id": "codex", "label": "OpenAI Codex", "role": "builder",
+     "icon": "🟢", "kind": "cli", "cmd": "codex"},
+    {"agent_id": "gemini", "label": "Gemini CLI", "role": "researcher",
+     "icon": "🔵", "kind": "cli", "cmd": "gemini"},
+    {"agent_id": "opencode", "label": "OpenCode", "role": "builder",
+     "icon": "🟣", "kind": "cli", "cmd": "opencode"},
+    {"agent_id": "cline", "label": "Cline", "role": "builder",
+     "icon": "🟤", "kind": "cli", "cmd": "cline"},
+    {"agent_id": "antigravity-ide", "label": "Antigravity IDE", "role": "builder",
+     "icon": "🟡", "kind": "exe",
+     "path": os.path.join(_LOCALAPPDATA, "Programs", "Antigravity IDE", "Antigravity IDE.exe")},
+    {"agent_id": "cursor", "label": "Cursor", "role": "builder",
+     "icon": "⚪", "kind": "exe",
+     "path": os.path.join("C:\\", "Program Files", "cursor", "resources", "app", "bin", "cursor")},
+    {"agent_id": "pipo-hermes", "label": "Pipo (Hermes)", "role": "orchestrator",
+     "icon": "🧠", "kind": "always"},
+]
+
+# npm global dir — many CLIs are shims here even if not on the probe's PATH.
+_NPM_DIR = os.path.join(_APPDATA, "npm")
+
+
+def _cli_installed(cmd):
+    """True if a CLI is reachable on PATH or as an npm global shim."""
+    import shutil
+    if shutil.which(cmd):
+        return True
+    for ext in ("", ".cmd", ".exe", ".ps1", ".bat"):
+        if os.path.isfile(os.path.join(_NPM_DIR, cmd + ext)):
+            return True
+    return False
+
+
+def _detect_machine_agents():
+    """Return the agent catalog annotated with installed/enabled/live state.
+
+    - installed: the tool actually exists on this machine
+    - enabled: the agent is currently registered in coordination state
+    - live: real liveness probe result (when available)
+    """
+    registered = {}
+    try:
+        registered = _apply_live_probes(COORD.get_agents()) if COORD else {}
+    except Exception:
+        registered = {}
+
+    out = []
+    for spec in _AGENT_CATALOG:
+        kind = spec.get("kind")
+        if kind == "cli":
+            installed = _cli_installed(spec["cmd"])
+        elif kind == "exe":
+            installed = os.path.isfile(spec.get("path", ""))
+        else:  # always (e.g. the host orchestrator)
+            installed = True
+        reg = registered.get(spec["agent_id"])
+        enabled = reg is not None
+        live = None
+        if reg is not None:
+            live = not reg.get("stale", True)
+        out.append({
+            "agent_id": spec["agent_id"],
+            "label": spec["label"],
+            "role": spec.get("role", "builder"),
+            "icon": spec.get("icon", "⚪"),
+            "installed": installed,
+            "enabled": enabled,
+            "live": live,
+            "detail": spec.get("cmd") or spec.get("path") or "host process",
+        })
+    return out
+
+
 def _patch_coordinator():
     global _original_write
     from coordination import Coordinator
@@ -553,6 +1124,55 @@ class CustomHandler(SimpleHTTPRequestHandler):
         # Silence HTTP server logs to keep terminal clean
         pass
 
+    def _client_is_local(self):
+        """True only for genuine same-machine requests. A request arriving via
+        the cloudflared tunnel also hits the socket from 127.0.0.1, so we must
+        NOT treat it as local — detect the proxy by Cloudflare/forwarding headers
+        and the public Host. Otherwise the tunnel would bypass auth entirely."""
+        try:
+            ip = self.client_address[0]
+        except Exception:
+            return False
+        if ip not in ("127.0.0.1", "::1", "localhost"):
+            return False
+        # Proxy/tunnel fingerprints => treat as REMOTE even though socket is local.
+        for h in ("Cf-Connecting-Ip", "Cf-Ray", "X-Forwarded-For", "Cdn-Loop"):
+            if self.headers.get(h):
+                return False
+        host = (self.headers.get("Host") or "").lower()
+        if host.startswith("localhost") or host.startswith("127.0.0.1"):
+            return True
+        # Unknown host with no proxy headers but local socket — be safe: not local.
+        return host == "" or host.startswith("[::1]")
+
+    def _check_auth(self):
+        """Gate /api/* for non-localhost callers when API_TOKEN is set.
+        Returns True if allowed. Sends 401 and returns False if rejected.
+        - Auth OFF when API_TOKEN empty (backward compatible).
+        - Localhost always allowed (Bố dùng máy này trực tiếp).
+        - Only /api/ paths are protected; static UI files load freely.
+        """
+        if not API_TOKEN:
+            return True
+        path = urllib.parse.urlparse(self.path).path
+        if not path.startswith("/api/"):
+            return True
+        if self._client_is_local():
+            return True
+        # Token from header or ?token=
+        tok = self.headers.get("X-Synapz-Token", "")
+        if not tok:
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            tok = (qs.get("token", [""])[0] or "")
+        if tok and tok == API_TOKEN:
+            return True
+        self.send_response(401)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps({"ok": False, "error": "unauthorized"}).encode("utf-8"))
+        return False
+
     def _json_ok(self, data):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -563,14 +1183,54 @@ class CustomHandler(SimpleHTTPRequestHandler):
     def _json_err(self, code, msg):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps({"ok": False, "error": msg}).encode("utf-8"))
+
+    def do_OPTIONS(self):
+        """CORS preflight — vscode-file:// cần OPTIONS trước POST."""
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+
+    def handle_one_request(self):
+        """Override để OPTIONS được dispatch đúng."""
+        try:
+            self.raw_requestline = self.rfile.readline(65537)
+            if len(self.raw_requestline) > 65536:
+                self.requestversion = "HTTP/1.0"
+                self.send_error(414)
+                return
+            if not self.raw_requestline:
+                self.close_connection = True
+                return
+            if not self.parse_request():
+                return
+            mname = "do_" + self.command
+            if not hasattr(self, mname):
+                self.send_error(501, f"Unsupported method ({self.command!r})")
+                return
+            method = getattr(self, mname)
+            method()
+            self.wfile.flush()
+        except TimeoutError as e:
+            self.log_error("Request timed out: %r", e)
+            self.close_connection = True
 
     def _read_body(self):
         length = int(self.headers.get("Content-Length", 0))
         return json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
 
     def do_GET(self):
+        # CORS preflight từ vscode-file:// đôi khi đến qua do_GET với method override
+        if self.command == "OPTIONS":
+            self.do_OPTIONS()
+            return
+        if not self._check_auth():
+            return
         parsed_path = urllib.parse.urlparse(self.path)
         if parsed_path.path == "/api/ide/status":
             ws_url = discover_ws_url()
@@ -591,6 +1251,51 @@ class CustomHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"ok": True, "messages": history}).encode('utf-8'))
             return
 
+        elif parsed_path.path == "/api/ide/localfile":
+            # Serve a local image referenced by an Antigravity chat message.
+            # Restricted to image files to avoid leaking arbitrary files.
+            qs = urllib.parse.parse_qs(parsed_path.query)
+            raw = (qs.get("path", [""])[0] or "").strip()
+            try:
+                fp = os.path.normpath(raw)
+                ext = os.path.splitext(fp)[1].lower()
+                allowed = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                           ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml"}
+                if ext not in allowed:
+                    self.send_response(415); self.end_headers()
+                    self.wfile.write(b"unsupported file type"); return
+                if not os.path.isfile(fp):
+                    self.send_response(404); self.end_headers()
+                    self.wfile.write(b"not found"); return
+                with open(fp, "rb") as imgf:
+                    data = imgf.read()
+                self.send_response(200)
+                self.send_header("Content-Type", allowed[ext])
+                self.send_header("Cache-Control", "max-age=3600")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                self.send_response(500); self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
+            return
+
+        elif parsed_path.path == "/api/ide/options":
+            # Read an interactive multiple-choice prompt from the IDE, if shown.
+            def _get_opts(sess):
+                res_str = sess.eval(JS_READ_OPTIONS, await_promise=False)
+                try:
+                    return json.loads(res_str)
+                except Exception:
+                    return {"has_options": False, "error": str(res_str)}
+            res = with_session(_get_opts)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(res).encode('utf-8'))
+            return
+
         elif parsed_path.path == "/api/ide/models":
             def _get(sess):
                 res_str = sess.eval(JS_OPEN_AND_LIST)
@@ -601,6 +1306,83 @@ class CustomHandler(SimpleHTTPRequestHandler):
             res = with_session(_get)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(res).encode('utf-8'))
+            return
+            
+        elif parsed_path.path == "/api/ide/files":
+            # List project files for @-mention autocomplete. Cached & filtered.
+            qs = urllib.parse.parse_qs(parsed_path.query)
+            q = (qs.get("q", [""])[0] or "").strip().lower()
+            try:
+                files = _list_project_files()
+                if q:
+                    files = [f for f in files if q in f.lower()]
+                files = files[:200]
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"files": files}).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500); self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
+            return
+
+        elif parsed_path.path == "/api/ide/composer_changes":
+            def _get_changes(sess):
+                js_code = r"""
+                (function() {
+                    var spans = document.querySelectorAll('span');
+                    var acceptBtn = null;
+                    for(var i=0; i<spans.length; i++) {
+                        if((spans[i].innerText || '').trim() === 'Accept all') {
+                            acceptBtn = spans[i];
+                            break;
+                        }
+                    }
+                    if(!acceptBtn) return JSON.stringify({has_changes: false});
+                    
+                    var container = acceptBtn.parentElement;
+                    for(var d=0; d<6; d++) {
+                        if(container && (container.innerText || '').indexOf('Files With Changes') !== -1) {
+                            break;
+                        }
+                        if(container) container = container.parentElement;
+                    }
+                    if(!container) return JSON.stringify({has_changes: false});
+                    
+                    var text = container.innerText || '';
+                    var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+                    
+                    var files = [];
+                    var title = "0 Files With Changes";
+                    if(lines.length > 0) {
+                        title = lines[0];
+                    }
+                    
+                    for(var i=3; i<lines.length; i+=4) {
+                        if(i+3 < lines.length) {
+                            files.push({
+                                added: lines[i],
+                                removed: lines[i+1],
+                                filename: lines[i+2],
+                                filepath: lines[i+3]
+                            });
+                        }
+                    }
+                    return JSON.stringify({has_changes: true, title: title, files: files});
+                })()
+                """
+                try:
+                    res_str = sess.eval(js_code, await_promise=False)
+                    return json.loads(res_str)
+                except Exception as e:
+                    return {"has_changes": False, "error": str(e)}
+            res = with_session(_get_changes)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(res).encode('utf-8'))
             return
@@ -649,8 +1431,13 @@ class CustomHandler(SimpleHTTPRequestHandler):
             return
 
         elif parsed_path.path == "/api/coord/agents":
-            agents = COORD.get_agents()
+            agents = _apply_live_probes(COORD.get_agents())
             self._json_ok(agents)
+            return
+
+        elif parsed_path.path == "/api/agents/catalog":
+            # Tất cả agent AI cài trên máy + trạng thái enabled/live.
+            self._json_ok({"agents": _detect_machine_agents()})
             return
 
         elif parsed_path.path == "/api/coord/locks":
@@ -696,6 +1483,8 @@ class CustomHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
+        if not self._check_auth():
+            return
         parsed_path = urllib.parse.urlparse(self.path)
         if parsed_path.path == "/api/ide/chat":
             content_length = int(self.headers['Content-Length'])
@@ -719,6 +1508,10 @@ class CustomHandler(SimpleHTTPRequestHandler):
                     
                 inject_result = inject_prompt_via_cdp(ws_url, prompt)
 
+                # Bind any images uploaded just before this prompt to it, so they
+                # re-appear when history is rebuilt (the transcript drops them).
+                commit_pending_attachments(prompt)
+
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -727,6 +1520,79 @@ class CustomHandler(SimpleHTTPRequestHandler):
                 self.send_response(500)
                 self.end_headers()
                 self.wfile.write(str(e).encode('utf-8'))
+            return
+
+        elif parsed_path.path == "/api/ide/launch":
+            # Start (or restart) Antigravity IDE with CDP debug port enabled.
+            # body: {"force": true} -> kill & relaunch even if already running.
+            try:
+                content_length = int(self.headers.get('Content-Length') or 0)
+                body = {}
+                if content_length:
+                    body = json.loads(self.rfile.read(content_length).decode('utf-8') or "{}")
+                force = bool(body.get("force", False))
+            except Exception:
+                force = False
+            res = launch_antigravity_cdp(force_restart=force)
+            self.send_response(200 if res.get("ok") else 503)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(res).encode('utf-8'))
+            return
+
+        elif parsed_path.path == "/api/orchestrator/dispatch":
+            # Giao 1 task cho mọi agent Connected qua synapz-orchestrator --live --json.
+            # body: {"prompt": "..."}
+            try:
+                content_length = int(self.headers.get('Content-Length') or 0)
+                body = json.loads(self.rfile.read(content_length).decode('utf-8') or "{}") if content_length else {}
+                prompt = (body.get("prompt") or "").strip()
+                if not prompt:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "reason": "prompt rỗng"}).encode('utf-8'))
+                    return
+                res = run_orchestrator_dispatch(prompt)
+                self.send_response(200 if res.get("ok") else 503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps(res).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "reason": str(e)}).encode('utf-8'))
+            return
+
+        elif parsed_path.path == "/api/orchestrator/pipeline":
+            # Chạy TRỌN 4 giai đoạn parallel orchestration.
+            # body: {"graph": {"nodes":[...]}, "echo": true}
+            try:
+                content_length = int(self.headers.get('Content-Length') or 0)
+                body = json.loads(self.rfile.read(content_length).decode('utf-8') or "{}") if content_length else {}
+                graph = body.get("graph")
+                echo = bool(body.get("echo", True))
+                if not graph or not isinstance(graph, dict) or not graph.get("nodes"):
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "reason": "thiếu graph.nodes"}).encode('utf-8'))
+                    return
+                res = run_orchestrator_pipeline(graph, echo=echo)
+                self.send_response(200 if res.get("ok") else 503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "reason": str(e)}).encode('utf-8'))
             return
 
         elif parsed_path.path == "/api/ide/model":
@@ -765,31 +1631,31 @@ class CustomHandler(SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(b"No files provided")
                     return
-                
-                cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".upload_cache")
-                os.makedirs(cache_dir, exist_ok=True)
-                
-                for old_f in os.listdir(cache_dir):
-                    try:
-                        os.remove(os.path.join(cache_dir, old_f))
-                    except Exception:
-                        pass
-                
+
+                # Persist uploads permanently so they survive history re-render.
+                # Unique-name each file; DON'T wipe old ones (the IDE keeps them).
+                os.makedirs(ATTACH_DIR, exist_ok=True)
+
                 abs_paths = []
                 for idx, f in enumerate(files):
                     name = f.get("name", f"file_{idx}")
                     data_str = f.get("data", "")
                     if "," in data_str:
                         data_str = data_str.split(",", 1)[1]
-                    import base64
                     file_data = base64.b64decode(data_str)
-                    dest_path = os.path.join(cache_dir, name)
+                    base, ext = os.path.splitext(name)
+                    uniq = f"{int(time.time()*1000)}_{idx}_{base}{ext}"
+                    dest_path = os.path.join(ATTACH_DIR, uniq)
                     with open(dest_path, "wb") as out_f:
                         out_f.write(file_data)
                     abs_paths.append(os.path.abspath(dest_path))
-                
+
+                # Queue for binding to the next /chat prompt.
+                with _attach_lock:
+                    _pending_attachments.extend(abs_paths)
+
                 res = attach_images_via_cdp(abs_paths)
-                
+
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -827,8 +1693,112 @@ class CustomHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(str(e).encode('utf-8'))
             return
+            
+        elif parsed_path.path == "/api/ide/composer_action":
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode('utf-8'))
+                action = body.get("action", "")
+                if action not in ("accept", "reject"):
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b"Invalid action")
+                    return
+                
+                target_text = "Accept all" if action == "accept" else "Reject all"
+                def _action(sess):
+                    js_code = r"""
+                    (function(){
+                        var spans = document.querySelectorAll('span');
+                        var targetText = """ + json.dumps(target_text) + r""";
+                        var hit = null;
+                        for(var i=0; i<spans.length; i++) {
+                            if((spans[i].innerText || '').trim() === targetText) {
+                                hit = spans[i];
+                                break;
+                            }
+                        }
+                        if(hit) {
+                            hit.click();
+                            return 'clicked';
+                        }
+                        return 'not_found';
+                    })()
+                    """
+                    res_str = sess.eval(js_code, await_promise=False)
+                    return {"result": res_str}
+                res = with_session(_action)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps(res).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(str(e).encode('utf-8'))
+            return
+
+        elif parsed_path.path == "/api/ide/autopilot":
+            # One-shot autopilot: auto-allow any approval dialog, then auto-accept edits.
+            # body: {"allow": true, "accept": true}  (both default true)
+            try:
+                body = self._read_body()
+                do_allow = body.get("allow", True)
+                do_accept = body.get("accept", True)
+                def _pilot(sess):
+                    out = {}
+                    if do_allow:
+                        out["allow"] = sess.eval(JS_AUTO_ALLOW, await_promise=False)
+                    if do_accept:
+                        out["accept"] = sess.eval(JS_AUTO_ACCEPT, await_promise=False)
+                    return out
+                res = with_session(_pilot)
+                self._json_ok({"ok": True, "result": res})
+            except Exception as e:
+                self._json_err(500, str(e))
+            return
+
+        elif parsed_path.path == "/api/ide/select_option":
+            # Pick a multiple-choice option in the IDE and (optionally) submit.
+            # body: {"index": 0, "submit": true}
+            try:
+                body = self._read_body()
+                index = int(body.get("index", -1))
+                do_submit = body.get("submit", True)
+                def _sel(sess):
+                    return sess.eval(js_select_option(index, do_submit))
+                res = with_session(_sel)
+                self._json_ok({"ok": True, "result": res})
+            except Exception as e:
+                self._json_err(500, str(e))
+            return
 
         # ─── Coordination API (POST) ─────────────────────────────
+        elif parsed_path.path == "/api/agents/toggle":
+            # Bật/tắt 1 agent: bật = đăng ký vào coordination (heartbeat),
+            # tắt = gỡ khỏi mạng lưới (deregister). body: {agent_id, enabled, role?}
+            try:
+                body = self._read_body()
+                agent_id = body.get("agent_id")
+                if not agent_id:
+                    self._json_err(400, "agent_id required")
+                    return
+                enabled = bool(body.get("enabled"))
+                if enabled:
+                    COORD.heartbeat(
+                        agent_id,
+                        role=body.get("role", "builder"),
+                        status="active",
+                    )
+                else:
+                    COORD.deregister(agent_id)
+                self._json_ok({"ok": True, "agent_id": agent_id, "enabled": enabled})
+            except Exception as e:
+                self._json_err(500, str(e))
+            return
+
         elif parsed_path.path == "/api/coord/heartbeat":
             try:
                 body = self._read_body()
@@ -893,7 +1863,26 @@ class CustomHandler(SimpleHTTPRequestHandler):
                     assigned_to=body.get("assigned_to"),
                     priority=body.get("priority", 5),
                     posted_by=body.get("posted_by", "dashboard"),
+                    checklist=body.get("checklist"),
                 )
+                self._json_ok({"ok": True, "task": task})
+            except Exception as e:
+                self._json_err(500, str(e))
+            return
+
+        elif parsed_path.path == "/api/coord/checklist":
+            # Tick/untick một bước checklist. body: {task_id, item_id, done}
+            try:
+                body = self._read_body()
+                task_id = body.get("task_id")
+                item_id = body.get("item_id")
+                if not task_id or not item_id:
+                    self._json_err(400, "task_id and item_id required")
+                    return
+                task = COORD.update_checklist_item(task_id, item_id, bool(body.get("done", False)))
+                if task is None:
+                    self._json_err(404, "task/item not found")
+                    return
                 self._json_ok({"ok": True, "task": task})
             except Exception as e:
                 self._json_err(500, str(e))
@@ -987,6 +1976,60 @@ class CustomHandler(SimpleHTTPRequestHandler):
                 self._json_err(500, str(e))
             return
 
+        elif parsed_path.path == "/api/coord/webhook/trigger":
+            try:
+                body = self._read_body()
+                event = body.get("event")
+                if not event:
+                    self._json_err(400, "event type required")
+                    return
+
+                prompt = None
+                if event == "task":
+                    assigned_to = body.get("assigned_to")
+                    if assigned_to in ("antigravity-ide", "builder"):
+                        title = body.get("title", "No Title")
+                        desc = body.get("description", "")
+                        priority = body.get("priority", 5)
+                        posted_by = body.get("posted_by", "unknown")
+
+                        prompt = (
+                            f"[AGENT COORDINATION: TASK ĐƯỢC GIAO]\n"
+                            f"📌 Tiêu đề: {title}\n"
+                            f"📝 Mô tả: {desc}\n"
+                            f"👤 Người giao: {posted_by}\n"
+                            f"⚡ Độ ưu tiên: {priority}\n\n"
+                            f"Con hãy thực hiện task này nhé thưa Bố."
+                        )
+                elif event == "message":
+                    to_agent = body.get("to")
+                    # CHỈ inject vào IDE khi tin nhắn GỬI ĐÍCH DANH antigravity-ide.
+                    # Broadcast (to=None) chỉ hiện ở khung chat realtime, KHÔNG dội
+                    # vào chat IDE — nếu không mọi báo cáo nội bộ sẽ làm nhiễu phiên
+                    # làm việc của Antigravity (đụng prompt gửi qua /api/ide/chat).
+                    if to_agent in ("antigravity-ide", "builder"):
+                        from_agent = body.get("from", "unknown")
+                        if from_agent != "antigravity-ide":
+                            content = body.get("content", "")
+                            prompt = (
+                                f"[AGENT COORDINATION: TIN NHẮN TỪ {from_agent.upper()}]\n"
+                                f"💬 Nội dung: {content}\n\n"
+                                f"Con hãy phản hồi hoặc xử lý tin nhắn này nhé thưa Bố."
+                            )
+
+                if prompt:
+                    ws_url = discover_ws_url()
+                    if not ws_url:
+                        self._json_err(503, "IDE debug port not responsive")
+                        return
+                    inject_result = inject_prompt_via_cdp(ws_url, prompt)
+                    self._json_ok({"ok": True, "injected": True, "result": inject_result})
+                else:
+                    self._json_ok({"ok": True, "injected": False, "reason": "Event ignored (not assigned to us or self-sent)"})
+            except Exception as e:
+                self._json_err(500, str(e))
+            return
+
         self.send_response(404)
         self.end_headers()
 
@@ -1006,12 +2049,47 @@ def main():
     _patch_coordinator()
     print("🤝 Coordination module initialized (SSE enabled)")
 
-    server = ThreadingHTTPServer(('127.0.0.1', PORT), CustomHandler)
+    # Auto-register webhook for antigravity-ide
+    try:
+        COORD.register_webhook(
+            agent_id="antigravity-ide",
+            url=f"http://127.0.0.1:{PORT}/api/coord/webhook/trigger",
+            events=["task", "message"]
+        )
+        print(f"🔌 Auto-registered Antigravity IDE coordination webhook listener to port {PORT}")
+    except Exception as e:
+        print(f"⚠️ Failed to auto-register webhook: {e}")
+
+    # NOTE: No heartbeat timer needed. Agent liveness is probed at view time in
+    # /api/coord/agents (_apply_live_probes): antigravity-ide -> CDP 9333,
+    # pipo-hermes -> Hermes gateway.pid process. Pull/probe model, not push/ping.
+
+    server = ThreadingHTTPServer(('0.0.0.0', PORT), CustomHandler)
     print(f"🚀 SynapzCore Dashboard Server started on http://localhost:{PORT}")
     print(f"📂 Repository root: {repo_root}")
     print("💡 Connecting to Antigravity IDE at debug port: 9333")
+
+    # ---- Telegram <-> Antigravity bridge (optional; reads telegram_bridge.json) ----
+    try:
+        import telegram_bridge
+        telegram_bridge.init(
+            inject_prompt=inject_prompt_via_cdp,
+            discover_ws=discover_ws_url,
+            get_history=get_conversation_history,
+        )
+        if telegram_bridge.start():
+            print("📲 Telegram bridge started (Antigravity <-> Telegram).")
+    except Exception as e:
+        print(f"⚠️ Telegram bridge not started: {e}")
+
     try:
         server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n👋 Server stopped. Goodbye!")
+        sys.exit(0)
+
+if __name__ == "__main__":
+    main()
     except KeyboardInterrupt:
         print("\n👋 Server stopped. Goodbye!")
         sys.exit(0)

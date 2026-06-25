@@ -318,15 +318,17 @@ async def build_causality_links_with_llm():
         "response_format": {"type": "json_object"}
     }
     
-    # 9Router local call
+    # 9Router local call (env-first; không hardcode key)
+    _nr_base = os.environ.get("NINEROUTER_URL", "http://127.0.0.1:20128")
+    _nr_key = os.environ.get("NINEROUTER_KEY", "")
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                "http://127.0.0.1:20128/v1/chat/completions",
+                f"{_nr_base}/v1/chat/completions",
                 json=payload,
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": "Bearer sk-f7d8d77f96db61e1-gv5z1w-64ae04b4"
+                    "Authorization": f"Bearer {_nr_key}"
                 },
                 timeout=90.0
             )

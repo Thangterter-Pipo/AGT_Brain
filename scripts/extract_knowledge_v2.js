@@ -161,7 +161,6 @@ function extractKnowledge(conv) {
   const allRequests = knowledge.user_requests.join(' ').toLowerCase();
   const topics = [];
   if (allRequests.match(/supabase|memory|database/)) topics.push('Memory/Database');
-  if (allRequests.match(/grok|subagent|gravity/)) topics.push('Grok Integration');
   if (allRequests.match(/mcp|tool|server/)) topics.push('MCP Server');
   if (allRequests.match(/cdp|browser|automat/)) topics.push('CDP Automation');
   if (allRequests.match(/deploy|docker|vps|contabo/)) topics.push('Deployment');

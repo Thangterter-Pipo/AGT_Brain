@@ -2,7 +2,7 @@
 coordination.py — Multi-AI Coordination Module for SynapzCore.
 
 Local file-based coordination layer. Zero external dependencies.
-Any AI agent (Antigravity, Grok, Claude, ChatGPT, Gemini, etc.) can
+Any AI agent (Antigravity, Claude, ChatGPT, Gemini, etc.) can
 register, claim files, post tasks, and exchange messages.
 
 State file: data/coordination/state.json
@@ -180,8 +180,22 @@ class Coordinator:
 
     def post_task(self, title: str, description: str = "",
                   assigned_to: str = None, priority: int = 5,
-                  posted_by: str = "system") -> dict:
-        """Post a task to the shared queue."""
+                  posted_by: str = "system", checklist: list = None) -> dict:
+        """Post a task to the shared queue.
+
+        checklist: optional list of step strings OR dicts {text, done}.
+        Normalized to [{id, text, done:false}, ...].
+        """
+        norm_checklist = []
+        for i, step in enumerate(checklist or []):
+            if isinstance(step, dict):
+                norm_checklist.append({
+                    "id": step.get("id") or f"ck-{i}",
+                    "text": str(step.get("text", "")),
+                    "done": bool(step.get("done", False)),
+                })
+            else:
+                norm_checklist.append({"id": f"ck-{i}", "text": str(step), "done": False})
         task = {
             "id": f"task-{int(time.time()*1000)}",
             "title": title,
@@ -190,6 +204,7 @@ class Coordinator:
             "priority": priority,
             "status": "pending",
             "posted_by": posted_by,
+            "checklist": norm_checklist,
             "created_at": self._now_iso(),
             "updated_at": self._now_iso(),
         }
@@ -199,6 +214,31 @@ class Coordinator:
             self._write_state(state)
         self.fire_webhooks("task", dict(task))
         return task
+
+    def update_checklist_item(self, task_id: str, item_id: str, done: bool) -> dict | None:
+        """Tick/untick một bước trong checklist của task. Auto status theo tiến độ."""
+        with _lock:
+            state = self._read_state()
+            for task in state["task_queue"]:
+                if task["id"] == task_id:
+                    items = task.setdefault("checklist", [])
+                    for it in items:
+                        if it["id"] == item_id:
+                            it["done"] = bool(done)
+                            break
+                    else:
+                        return None
+                    # Auto status: mọi bước done → done; có bước done → active; chưa → pending
+                    total = len(items)
+                    done_n = sum(1 for it in items if it["done"])
+                    if total and done_n == total:
+                        task["status"] = "done"
+                    elif done_n > 0 and task["status"] == "pending":
+                        task["status"] = "active"
+                    task["updated_at"] = self._now_iso()
+                    self._write_state(state)
+                    return task
+        return None
 
     def update_task(self, task_id: str, status: str = None,
                     assigned_to: str = None, note: str = None) -> dict | None:
@@ -341,6 +381,55 @@ class Coordinator:
         """Register a webhook URL for an agent. Events: message, task, log."""
         if events is None:
             events = ["message", "task", "log"]
+        entry = {
+            "url": url,
+            "events": events,
+            "registered_at": self._now_iso(),
+        }
+        with _lock:
+            state = self._read_state()
+            state.setdefault("webhooks", {})[agent_id] = entry
+            self._write_state(state)
+        return entry
+
+    def unregister_webhook(self, agent_id: str) -> bool:
+        """Remove a registered webhook for agent_id."""
+        with _lock:
+            state = self._read_state()
+            existed = agent_id in state.get("webhooks", {})
+            state.setdefault("webhooks", {}).pop(agent_id, None)
+            if existed:
+                self._write_state(state)
+        return existed
+
+    def get_webhooks(self) -> dict:
+        """Return all registered webhooks."""
+        return self._read_state().get("webhooks", {})
+
+    def fire_webhooks(self, event_type: str, payload: dict) -> None:
+        """POST payload to all webhooks subscribed to event_type (non-blocking)."""
+        webhooks = self._read_state().get("webhooks", {})
+        payload = dict(payload)
+        payload["event"] = event_type
+        payload["timestamp"] = self._now_iso()
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+        def _post(url: str) -> None:
+            try:
+                req = urllib.request.Request(
+                    url, data=data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=5):
+                    pass
+            except Exception:
+                pass  # silent fail
+
+        for wh in webhooks.values():
+            if event_type in wh.get("events", []):
+                t = threading.Thread(target=_post, args=(wh["url"],), daemon=True)
+                t.start()
         entry = {
             "url": url,
             "events": events,

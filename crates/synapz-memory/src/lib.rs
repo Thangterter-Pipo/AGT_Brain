@@ -1,7 +1,7 @@
 //! # agt-memory — Antigravity Memory Engine
 //!
 //! Manages long-term shared memory for the 3-AI team via Supabase cloud + local JSON queue.
-//! All agents (Antigravity, Grok, ChatGPT) read/write to the same memory.
+//! All agents (Antigravity, ChatGPT) read/write to the same memory.
 
 mod supabase;
 mod queue;
@@ -148,9 +148,9 @@ mod tests {
 
     #[test]
     fn memory_struct_deserializes_with_new_fields() {
-        let json = r#"{"id":1,"content":"hello","role":"bố","agent":"grok","category":"research","importance":5,"confidence":4,"metadata":{},"created_at":"2026-04-17"}"#;
+        let json = r#"{"id":1,"content":"hello","role":"bố","agent":"antigravity","category":"research","importance":5,"confidence":4,"metadata":{},"created_at":"2026-04-17"}"#;
         let mem: Memory = serde_json::from_str(json).unwrap();
-        assert_eq!(mem.agent, "grok");
+        assert_eq!(mem.agent, "antigravity");
         assert_eq!(mem.importance, 5);
         assert_eq!(mem.confidence, 4);
     }

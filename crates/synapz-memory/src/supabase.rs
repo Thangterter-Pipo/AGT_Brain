@@ -1,5 +1,5 @@
 //! Supabase REST client for shared memory storage.
-//! Supports all 3 agents: Antigravity, Grok, ChatGPT.
+//! Supports all agents: Antigravity, ChatGPT.
 
 use anyhow::{anyhow, Result};
 use reqwest::Client;
@@ -342,7 +342,7 @@ impl SupabaseMemory {
 
         // Count per agent
         let mut agent_counts = serde_json::Map::new();
-        for agent in &["antigravity", "grok", "chatgpt"] {
+        for agent in &["antigravity", "chatgpt"] {
             let req = self.client
                 .get(format!("{}/rest/v1/memories", self.url))
                 .query(&[("select", "id"), ("agent", &format!("eq.{agent}")), ("limit", "1")])
@@ -385,8 +385,8 @@ impl SupabaseMemory {
     /// Set EMBEDDING_API_URL env var to override (default: http://127.0.0.1:8000).
     pub async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
         let api_url = std::env::var("EMBEDDING_API_URL")
-            .or_else(|_| std::env::var("GROK_API_URL"))
-            .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string());
+            .or_else(|_| std::env::var("NINEROUTER_URL"))
+            .unwrap_or_else(|_| "http://localhost:20128".to_string());
 
         let payload = serde_json::json!({
             "model": "text-embedding-3-small",
@@ -394,13 +394,16 @@ impl SupabaseMemory {
             "dimensions": 384,
         });
 
-        let resp = self.client
+        let mut req = self.client
             .post(format!("{api_url}/v1/embeddings"))
-            .header("Authorization", "Bearer grok-key")
             .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
-            .await?;
+            .json(&payload);
+
+        if let Ok(key) = std::env::var("NINEROUTER_KEY") {
+            req = req.header("Authorization", format!("Bearer {key}"));
+        }
+
+        let resp = req.send().await?;
 
         if !resp.status().is_success() {
             let body = resp.text().await.unwrap_or_default();

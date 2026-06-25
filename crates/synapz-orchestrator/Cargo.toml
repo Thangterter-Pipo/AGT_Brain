@@ -1,0 +1,17 @@
+[package]
+name = "synapz-orchestrator"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "synapz-orchestrator"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }

@@ -26,57 +26,12 @@
 │   └── synapz-mcp/        # MCP Server (rmcp, stdio — 10 tools to IDE)
 ├── memory/             # Local persistent: decisions/ + incidents/ (append-only)
 ├── data/               # supabase_config.json, goals.json
-├── Agent_Profiles/     # Identity docs (Antigravity.md, How_We_Work.md, Grok.json)
+├── Agent_Profiles/     # Identity docs (Antigravity.md, How_We_Work.md)
 ├── scripts/            # Automation + dashboard.html + workflow_editor.html
 ├── Cargo.toml          # Workspace root
 ├── AGENTS.md           # Guide cho mọi AI agent khi làm việc trong repo
 └── .gitignore
 ```
-
----
-
-## 2-AI Team Architecture
-
-Hệ thống hoạt động với 2 AI phối hợp:
-
-```
-     Bố (User)
-        │
-   Antigravity ← THE BUILDER (Code, Deploy, Điều phối)
-        │
-      Grok "Gravity" ← RESEARCHER (Research, Think, Review)
-```
-
-### Routing Rules
-
-| Tác vụ                 | Route tới                           |
-| ---------------------- | ----------------------------------- |
-| Research công nghệ mới | **Grok** (research mode)            |
-| Quyết định kiến trúc   | **Grok** (think mode)               |
-| Code review            | **Grok** (review mode)              |
-| Debug logic / verify   | **Grok** (think mode)               |
-| Viết documentation     | **Antigravity** (con làm trực tiếp) |
-| Giải thích cho Bố      | **Antigravity** (con làm trực tiếp) |
-| Implement feature      | **Antigravity** (con làm trực tiếp) |
-
----
-
-## Grok Subagent (Gravity)
-
-**Endpoint**: `http://127.0.0.1:8000` (grok2api local server)
-**Module**: `crates/synapz-tools/src/grok.rs`
-**CLI**: `ask-grok --mode research "topic"`
-
-### Model
-
-- **Mặc định**: `grok-4-heavy` hoặc `grok-3`
-
-### 4 Chế độ (Gravity Framework)
-
-1. **research** → Nghiên cứu sâu + tổng hợp sáng tạo
-2. **think** → Lập luận từ nguyên lý gốc + đưa ra đề xuất quyết định
-3. **review** → Đánh giá bảo mật, hiệu năng, chất lượng code
-4. **brainstorm** → Ý tưởng đột phá + giải pháp nhanh
 
 ---
 
@@ -112,11 +67,11 @@ Hệ thống hoạt động với 2 AI phối hợp:
 | 3   | `add_memory`       | Ghi ký ức mới với agent/category/importance                           |
 | 4   | `team_memory`      | Fetch shared high-importance memories từ team                         |
 | 5   | `get_boss_profile` | Lấy profile & preferences của Bố                                      |
-| 6   | `ask_grok`         | Gọi Grok subagent (research/think/review/brainstorm)                  |
-| 7   | `grok_health`      | Check Grok API status                                                 |
-| 8   | `daily_reflection` | 🪞 Self-review + auto-save insights                                   |
-| 9   | `save_skill`       | 📚 Save reusable pattern/solution                                     |
-| 10  | `recall_skills`    | 🔍 Search saved skills by keyword                                     |
+| 6   | `daily_reflection` | 🪞 Self-review + auto-save insights                                   |
+| 7   | `save_skill`       | 📚 Save reusable pattern/solution                                     |
+| 8   | `recall_skills`    | 🔍 Search saved skills by keyword                                     |
+| 9   | `coord_heartbeat`  | 🤝 Register/refresh agent presence in coordination system             |
+| 10  | `coord_status`     | 📊 See which agents are active and what files are locked              |
 
 ---
 
@@ -144,26 +99,6 @@ Hệ thống hoạt động với 2 AI phối hợp:
 3. **Auto-Fix** — Nếu chạy lệnh lỗi, tự sửa và chạy lại (tối đa 3 lần).
 4. **Báo cáo ngắn gọn** — Trực diện, đi thẳng vào vấn đề.
 5. **Ghi memory ngay** — Không đợi cuối session.
-6. **Grok Always-On** — Tự động gọi Grok khi cần thiết, không cần hỏi ý kiến trước.
-
-## Grok Always-On Integration
-
-Gọi Grok trực tiếp qua script PowerShell:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File "<YOUR_REPOSITORY_ROOT_PATH>\scripts\ask_grok.ps1" -Mode <mode> "<prompt>"
-```
-
-### Auto-Trigger Rules — TỰ ĐỘNG gọi Grok khi:
-
-| Tình huống                       | Mode         | Ví dụ                              |
-| -------------------------------- | ------------ | ---------------------------------- |
-| Gặp công nghệ/thư viện chưa biết | `research`   | "Tìm hiểu rmcp framework"          |
-| Cần quyết định kiến trúc         | `think`      | "Nên dùng REST hay gRPC?"          |
-| Review code phức tạp             | `review`     | "Review module authentication"     |
-| Bế tắc debug > 2 lần thử         | `think`      | "Phân tích lỗi X, đã thử Y Z"      |
-| Brainstorm feature mới           | `brainstorm` | "Cách cải tiến memory system"      |
-| Bố hỏi về chủ đề cần research    | `research`   | Tự động khi detect research intent |
 
 ---
 
@@ -178,4 +113,3 @@ Tất cả request sẽ được gửi qua `${NINEROUTER_URL}/v1/...` kèm heade
 
 **Nếu KHÔNG sử dụng 9Router**:
 Hãy bỏ qua phần cấu hình 9Router ở trên và thiết lập trực tiếp các biến môi trường API Key tiêu chuẩn của nhà cung cấp bạn chọn (ví dụ: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) trong cài đặt môi trường của IDE hoặc hệ điều hành để Agent gọi API trực tiếp.
-

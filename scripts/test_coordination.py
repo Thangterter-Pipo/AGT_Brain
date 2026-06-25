@@ -344,3 +344,103 @@ def test_corrupt_state_recovers_to_empty(tmp_path):
         f.write("{not valid json")
     # _read_state should fall back to empty state, not raise
     assert c.get_agents() == {}
+
+
+# ─── checklist (task steps) ────────────────────────────────────
+
+def test_post_task_normalizes_string_checklist(coord):
+    t = coord.post_task("build", checklist=["read", "write", "verify"])
+    cl = t["checklist"]
+    assert len(cl) == 3
+    assert cl[0] == {"id": "ck-0", "text": "read", "done": False}
+    assert cl[2]["text"] == "verify"
+
+
+def test_post_task_normalizes_dict_checklist(coord):
+    t = coord.post_task("build", checklist=[{"text": "step1", "done": True},
+                                            {"id": "x", "text": "step2"}])
+    cl = t["checklist"]
+    assert cl[0]["done"] is True
+    assert cl[1]["id"] == "x"
+    assert cl[1]["done"] is False
+
+
+def test_checklist_tick_sets_active(coord):
+    t = coord.post_task("build", checklist=["a", "b", "c"])
+    assert t["status"] == "pending"
+    updated = coord.update_checklist_item(t["id"], "ck-0", True)
+    assert updated["checklist"][0]["done"] is True
+    assert updated["status"] == "active"  # one done, not all -> active
+
+
+def test_checklist_all_done_sets_done(coord):
+    t = coord.post_task("build", checklist=["a", "b"])
+    coord.update_checklist_item(t["id"], "ck-0", True)
+    final = coord.update_checklist_item(t["id"], "ck-1", True)
+    assert final["status"] == "done"  # every step done -> task done
+
+
+def test_checklist_untick_reverts_progress(coord):
+    t = coord.post_task("build", checklist=["a", "b"])
+    coord.update_checklist_item(t["id"], "ck-0", True)
+    coord.update_checklist_item(t["id"], "ck-1", True)
+    reverted = coord.update_checklist_item(t["id"], "ck-1", False)
+    done_n = sum(1 for it in reverted["checklist"] if it["done"])
+    assert done_n == 1
+
+
+def test_checklist_unknown_item_returns_none(coord):
+    t = coord.post_task("build", checklist=["a"])
+    assert coord.update_checklist_item(t["id"], "ck-99", True) is None
+
+
+def test_checklist_unknown_task_returns_none(coord):
+    assert coord.update_checklist_item("task-ghost", "ck-0", True) is None
+
+
+# ─── project log ───────────────────────────────────────────────
+
+def test_add_and_get_log(coord):
+    coord.add_log("agent-a", "deployed", detail="v1.0", category="deploy")
+    entries = coord.get_log()
+    assert len(entries) == 1
+    assert entries[0]["action"] == "deployed"
+    assert entries[0]["category"] == "deploy"
+
+
+def test_get_log_filter_by_category(coord):
+    coord.add_log("agent-a", "x", category="deploy")
+    coord.add_log("agent-a", "y", category="task")
+    assert len(coord.get_log(category="deploy")) == 1
+
+
+def test_get_log_newest_first(coord):
+    coord.add_log("agent-a", "first")
+    coord.add_log("agent-a", "second")
+    entries = coord.get_log()
+    assert entries[0]["action"] == "second"  # reversed -> newest first
+
+
+# ─── webhooks ──────────────────────────────────────────────────
+
+def test_register_and_get_webhook(coord):
+    coord.register_webhook("agent-a", "http://localhost:9999/hook")
+    hooks = coord.get_webhooks()
+    assert "agent-a" in hooks
+    assert hooks["agent-a"]["url"] == "http://localhost:9999/hook"
+    assert "message" in hooks["agent-a"]["events"]
+
+
+def test_unregister_webhook(coord):
+    coord.register_webhook("agent-a", "http://x/hook")
+    assert coord.unregister_webhook("agent-a") is True
+    assert "agent-a" not in coord.get_webhooks()
+
+
+def test_unregister_unknown_webhook_returns_false(coord):
+    assert coord.unregister_webhook("ghost") is False
+
+
+def test_webhook_custom_events(coord):
+    coord.register_webhook("agent-a", "http://x/hook", events=["task"])
+    assert coord.get_webhooks()["agent-a"]["events"] == ["task"]
