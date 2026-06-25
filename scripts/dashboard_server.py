@@ -201,6 +201,7 @@ def get_conversation_history(limit=40):
                             "role": "user",
                             "content": content,
                             "step_index": step_idx,
+                            "created_at": data.get("created_at"),
                             "images": imgs,
                         })
                     # Parse agent response — ONLY the planner's natural-language
@@ -221,6 +222,7 @@ def get_conversation_history(limit=40):
                             "role": "assistant",
                             "content": full,
                             "step_index": step_idx,
+                            "created_at": data.get("created_at"),
                             "images": [],
                         })
                 except Exception:
@@ -1219,6 +1221,9 @@ class CustomHandler(SimpleHTTPRequestHandler):
         except TimeoutError as e:
             self.log_error("Request timed out: %r", e)
             self.close_connection = True
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            # Browser đóng SSE/tab đột ngột — không phải lỗi thật, bỏ qua
+            self.close_connection = True
 
     def _read_body(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -2084,12 +2089,6 @@ def main():
 
     try:
         server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n👋 Server stopped. Goodbye!")
-        sys.exit(0)
-
-if __name__ == "__main__":
-    main()
     except KeyboardInterrupt:
         print("\n👋 Server stopped. Goodbye!")
         sys.exit(0)
