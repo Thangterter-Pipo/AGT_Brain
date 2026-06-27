@@ -3,7 +3,9 @@
 //! 14 tools: file (6) + shell (1) + web (2) + memory (5)
 //! Plus goals manager, reflection logger, and CDP autonomous controller.
 
-pub mod cdp_controller;
+/// CDP autonomous IDE controller — extracted to the `antigravity-cdp` crate.
+/// Re-exported here so existing `synapz_tools::cdp_controller::…` paths keep working.
+pub use antigravity_cdp as cdp_controller;
 pub mod file;
 pub mod goals;
 pub mod memory;

@@ -62,6 +62,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "antigravity-cdp"
+version = "0.1.0"
+source = "git+https://github.com/Thangterter-Pipo/antigravity-cdp.git?branch=main#03d0a04340ede003b20f94e181d5c393dbe2e8f0"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1505,17 +1519,16 @@ dependencies = [
 name = "synapz-tools"
 version = "0.1.0"
 dependencies = [
+ "antigravity-cdp",
  "anyhow",
  "chrono",
  "clap",
- "futures-util",
  "glob",
  "reqwest",
  "serde",
  "serde_json",
  "synapz-memory",
  "tokio",
- "tokio-tungstenite",
  "uuid",
 ]
 
