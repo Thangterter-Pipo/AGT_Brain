@@ -1475,13 +1475,16 @@ dependencies = [
 [[package]]
 name = "synapz-memory"
 version = "0.1.0"
+source = "git+https://github.com/Thangterter-Pipo/synapz-memory.git?branch=main#0140c977d0797d8162c068755ba9661c80c8d3bb"
 dependencies = [
  "anyhow",
  "chrono",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-tungstenite",
  "uuid",
 ]
 

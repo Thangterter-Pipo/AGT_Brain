@@ -21,6 +21,6 @@ chrono = { workspace = true }
 glob = { workspace = true }
 anyhow = { workspace = true }
 clap = { version = "4", features = ["derive"] }
-synapz-memory = { path = "../synapz-memory" }
+synapz-memory = { git = "https://github.com/Thangterter-Pipo/synapz-memory.git", branch = "main" }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 futures-util = "0.3"
